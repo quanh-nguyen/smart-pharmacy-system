@@ -3,40 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ thống phòng học</title>
+    <title>Nhà Thuốc Thông Minh - Tìm Thuốc & Hiệu Thuốc Gần Nhất</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <nav class="navbar">
-        <div class="container">
-            <a href="/">Trang chủ</a>
-            <a href="/dashboard">Dashboard</a>
-        </div>
-    </nav>
-
     <div class="container">
+        <header class="topbar">
+            <h1>🏥 Nhà Thuốc Thông Minh</h1>
+            <p>Tìm thuốc & định vị hiệu thuốc gần nhất</p>
+        </header>
+
         <section class="hero">
-            <h1>Hệ thống quản lý phòng học thư viện</h1>
-            <p>Quản lý lịch đ��t phòng, trạng thái phòng và hiệu suất sử dụng</p>
-            <a href="/dashboard"><button>Đi tới Dashboard</button></a>
+            <div class="card">
+                <h2>Tìm Kiếm Thuốc</h2>
+                <p>Tìm thuốc theo tên, công dụng hoặc thành phần</p>
+                <a href="/search" class="btn btn-primary">🔍 Tìm Kiếm</a>
+            </div>
+            <div class="card">
+                <h2>Định Vị Hiệu Thuốc</h2>
+                <p>Xem bản đồ hiệu thuốc gần nhất & đường đi ngắn nhất</p>
+                <a href="/map" class="btn btn-primary">🗺️ Xem Bản Đồ</a>
+            </div>
         </section>
 
-        <div class="card-grid">
-            <div class="card">
-                <h3>Phòng trống</h3>
-                <p>12 phòng</p>
+        <section class="stats">
+            <div class="stat-card">
+                <p>Tổng Thuốc</p>
+                <h2>5+</h2>
             </div>
-            <div class="card">
-                <h3>Đang được đặt</h3>
-                <p>5 phòng</p>
+            <div class="stat-card">
+                <p>Hiệu Thuốc</p>
+                <h2>4</h2>
             </div>
-            <div class="card">
-                <h3>Đang bảo trì</h3>
-                <p>2 phòng</p>
+            <div class="stat-card">
+                <p>Trạng Thái</p>
+                <h2>Hoạt Động</h2>
             </div>
-        </div>
+        </section>
     </div>
-
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

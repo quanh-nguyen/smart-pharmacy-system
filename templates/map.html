@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bản Đồ & Chỉ Đường - Nhà Thuốc Thông Minh</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+    <div class="container-full">
+        <header class="topbar">
+            <h1>🗺️ Bản Đồ & Chỉ Đường</h1>
+            <a href="/" class="btn-back">← Quay Lại</a>
+        </header>
+
+        <div class="map-container">
+            <div id="map" class="map"></div>
+            <div class="sidebar">
+                <h3>Hiệu Thuốc Gần Nhất</h3>
+                <div id="pharmacies-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+</body>
+</html>

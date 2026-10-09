@@ -1,203 +1,102 @@
-# Hệ thống quản lý phòng học thư viện
+# Hệ Thống Nhà Thuốc Thông Minh
 
-Hệ thống quản lý phòng học thư viện là ứng dụng web hỗ trợ quản lý và theo dõi việc sử dụng các phòng học trong thư viện. Dự án được xây dựng bằng Python và Flask, sử dụng SQLite để lưu trữ dữ liệu.
+Ứng dụng giúp người dùng tìm kiếm thuốc và xác định đường đi ngắn nhất đến hiệu thuốc gần nhất có sẵn thuốc cần tìm.
 
-## 1. Mục tiêu
+## Tính Năng
+- 🔍 **Tìm kiếm thuốc**: Tìm kiếm thuốc theo tên, công dụng, thành phần
+- 📍 **Định vị vị trí**: Xác định hiệu thuốc gần nhất có thuốc
+- 🗺️ **Tính toán đường đi**: Tìm đường đi ngắn nhất (Dijkstra algorithm)
+- 📊 **Thông tin chi tiết**: Giá cả, liều dùng, chỉ định, contraindication
+- 💾 **Lưu yêu thích**: Lưu các thuốc hay sử dụng
 
-- Quản lý thông tin các phòng học trong thư viện
-- Hỗ trợ theo dõi tình trạng phòng học
-- Cung cấp giao diện tổng quan về hệ thống
-- Tạo nền tảng để phát triển chức năng đặt lịch và quản lý người dùng
+## Công Nghệ
+- **Backend**: Python 3.9+ (Flask)
+- **Frontend**: HTML5, CSS3, JavaScript (ES6+)
+- **Database**: SQLite
+- **Maps**: OpenStreetMap (Leaflet.js) hoặc Google Maps API
+- **Algorithm**: Dijkstra's shortest path
 
-## 2. Tính năng chính
-
-- Hiển thị trang chủ của hệ thống
-- Hiển thị trang tổng quan quản lý phòng học
-- Quản lý dữ liệu phòng học với SQLite
-- Chuẩn bị cấu trúc để mở rộng chức năng đặt phòng, quản lý người dùng và báo cáo
-
-## 3. Đối tượng sử dụng
-
-- Quản trị viên hệ thống
-- Nhân viên thư viện
-- Giảng viên
-- Sinh vi��n
-
-## 4. Quy trình hoạt động dự kiến
-
-1. Người dùng truy cập hệ thống
-2. Xem thông tin và trạng thái các phòng học
-3. Chọn phòng học cần sử dụng
-4. Gửi yêu cầu đặt phòng
-5. Quản trị viên hoặc nhân viên thư viện phê duyệt yêu cầu
-6. Hệ thống cập nhật trạng thái phòng
-7. Người dùng theo dõi lịch sử sử dụng và báo cáo
-
-## 5. Công nghệ sử dụng
-
-- **Ngôn ngữ:** Python
-- **Backend:** Flask 3.0.3
-- **Template engine:** Jinja2 (được tích hợp trong Flask)
-- **Database:** SQLite
-- **Cấu hình môi trường:** python-dotenv
-- **Frontend:** HTML, CSS, JavaScript
-
-## 6. Yêu cầu hệ thống
-
-- Python 3.9 trở lên
-- `pip`
-- Trình duyệt web hiện đại
-- Kết nối internet để tải các package khi cài đặt lần đầu
-
-Dự án sử dụng SQLite nên không cần cài đặt máy chủ cơ sở dữ liệu riêng. Cơ sở dữ liệu được lưu tại:
-
-```text
-database/library_management.db
-```
-
-## 7. Hướng dẫn cài đặt
-
-### Bước 1: Clone repository
+## Cài Đặt
 
 ```bash
-git clone https://github.com/quanh-nguyen/He-thong-quan-ly-phong-hoc-thu-vien.git
-cd He-thong-quan-ly-phong-hoc-thu-vien
-```
+# Clone repo
+git clone https://github.com/quanh-nguyen/he-thong-nha-thuoc.git
+cd he-thong-nha-thuoc
 
-### Bước 2: Tạo môi trường ảo
-
-Windows:
-
-```bash
+# Tạo virtual environment
 python -m venv .venv
-.venv\Scripts\activate
-```
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-Linux/macOS:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### Bước 3: Cài đặt các thư viện phụ thuộc
-
-```bash
-python -m pip install --upgrade pip
+# Cài đặt dependencies
 pip install -r requirements.txt
-```
 
-### Bước 4: Khởi tạo cơ sở dữ liệu
-
-Nếu cần tạo hoặc cập nhật cơ sở dữ liệu theo schema của dự án, chạy lệnh sau:
-
-```bash
-python -c "from models import init_db; init_db()"
-```
-
-Lệnh trên sẽ khởi tạo cơ sở dữ liệu SQLite tại `database/library_management.db` dựa trên file `database/schema.sql`.
-
-### Bước 5: Chạy ứng dụng
-
-```bash
+# Chạy ứng dụng
 python app.py
 ```
 
-Sau khi ứng dụng khởi động, mở trình duyệt và truy cập:
+Mở trình duyệt: `http://localhost:5000`
 
-```text
-http://localhost:5000
+## Cấu Trúc Dự Án
+
 ```
-
-Trang tổng quan có thể truy cập tại:
-
-```text
-http://localhost:5000/dashboard
-```
-
-### Chạy ứng dụng bằng Flask CLI
-
-Ngoài cách chạy trực tiếp bằng `python app.py`, có thể sử dụng Flask CLI:
-
-Windows PowerShell:
-
-```powershell
-$env:FLASK_APP="app.py"
-$env:FLASK_DEBUG=1
-flask run
-```
-
-Linux/macOS:
-
-```bash
-export FLASK_APP=app.py
-export FLASK_DEBUG=1
-flask run
-```
-
-### Vô hiệu hóa môi trường ảo
-
-Sau khi hoàn tất, có thể thoát môi trường ảo bằng lệnh:
-
-```bash
-deactivate
-```
-
-### Lưu ý
-
-- Kích hoạt môi trường ảo trước khi cài đặt package hoặc chạy ứng dụng.
-- Không commit các thông tin nhạy cảm trong file `.env` lên repository.
-- Nếu lệnh `python` không hoạt động trên Linux/macOS, hãy sử dụng `python3`.
-- Chế độ debug chỉ nên sử dụng trong môi trường phát triển, không sử dụng trực tiếp khi triển khai production.
-
-## 8. Cấu trúc thư mục
-
-```text
-He-thong-quan-ly-phong-hoc-thu-vien/
-├── app.py                         # Điểm khởi chạy ứng dụng Flask
-├── models.py                      # Kết nối và thao tác với SQLite
-├── requirements.txt               # Danh sách thư viện Python
+├── app.py                    # Flask app chính
+├── models.py                 # Models (Drug, Pharmacy, User, etc)
 ├── database/
-│   ├── schema.sql                 # Cấu trúc cơ sở dữ liệu
-│   └── library_management.db      # Cơ sở dữ liệu SQLite
-├── templates/                     # Các giao diện Jinja2/HTML
-├── static/                        # Tài nguyên tĩnh như CSS, JavaScript
-├── cxx_modules/                   # Các module C++ bổ trợ nếu có
-├── .gitignore
-└── README.md
+│   └── schema.sql            # SQL schema
+│   └── seed_data.sql         # Dữ liệu mẫu
+├── services/
+│   ├── drug_service.py       # Tìm kiếm & lọc thuốc
+│   ├── pharmacy_service.py   # Quản lý hiệu thuốc
+│   └── routing_service.py    # Tính toán đường đi (Dijkstra)
+├── api/
+│   ├── drugs.py              # API endpoint cho thuốc
+│   ├── pharmacy.py           # API endpoint cho hiệu thuốc
+│   └── routes.py             # API endpoint cho đường đi
+├── templates/
+│   ├── index.html            # Trang chính
+│   ├── search.html           # Trang tìm kiếm
+│   └── map.html              # Trang bản đồ
+├── static/
+│   ├── css/
+│   │   └── style.css
+│   └── js/
+│       ├── search.js
+│       └── map.js
+└── requirements.txt
 ```
 
-## 9. Các trang hiện có
+## API Endpoints
 
-- Trang chủ: `http://localhost:5000/`
-- Trang tổng quan: `http://localhost:5000/dashboard`
+### Tìm Kiếm Thuốc
+```
+GET /api/drugs/search?q=aspirin
+GET /api/drugs/<id>
+```
 
-## 10. Roadmap
+### Hiệu Thuốc
+```
+GET /api/pharmacy/list
+GET /api/pharmacy/<id>
+POST /api/pharmacy/nearest?lat=21.0285&lng=105.8542&drug_id=1
+```
 
-- [ ] Hoàn thiện chức năng đặt phòng
-- [ ] Quản lý người dùng và phân quyền
-- [ ] Kiểm tra phòng trống theo ngày và giờ
-- [ ] Tích hợp email hoặc thông báo
-- [ ] Tạo biểu đồ thống kê
-- [ ] Bổ sung kiểm thử tự động
-- [ ] Triển khai lên môi trường production
+### Tính Toán Đường Đi
+```
+POST /api/route/shortest
+{
+  "start_lat": 21.0285,
+  "start_lng": 105.8542,
+  "end_pharmacy_id": 1
+}
+```
 
-## 11. Đóng góp
+## Phát Triển
 
-Mọi đóng góp đều được chào đón. Nếu bạn muốn tham gia phát triển, vui lòng:
+Tuỳ chỉnh trong `config.py`:
+- `DATABASE_URL`: Đường dẫn database
+- `MAPS_API_KEY`: API key cho Google Maps (tuỳ chọn)
+- `MAX_DISTANCE`: Bán kính tìm kiếm hiệu thuốc (km)
 
-1. Fork repository
-2. Tạo một nhánh mới cho thay đổi của bạn
-3. Cài đặt dependency và kiểm tra ứng dụng cục bộ
-4. Commit thay đổi với nội dung rõ ràng
-5. Tạo pull request và mô tả chi tiết thay đổi
+## Giấy Phép
 
-## 12. Liên hệ
-
-- **Tác giả:** quanh-nguyen
-- **GitHub:** https://github.com/quanh-nguyen
-- **Repository:** https://github.com/quanh-nguyen/He-thong-quan-ly-phong-hoc-thu-vien
-
-## 13. Giấy phép
-
-Dự án chưa chỉ định giấy phép cụ thể. Vui lòng bổ sung file `LICENSE` nếu muốn quy định cách sử dụng và phân phối mã nguồn.
+MIT License

@@ -1,29 +1,50 @@
-# Cấu trúc bảng dữ liệu cho hệ thống quản lý phòng học
-
-CREATE TABLE IF NOT EXISTS rooms (
+-- Bảng thuốc
+CREATE TABLE IF NOT EXISTS drugs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_name TEXT NOT NULL,
-    status TEXT NOT NULL CHECK(status IN ('available', 'booked', 'maintenance')),
-    capacity INTEGER NOT NULL,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    usage TEXT,
+    side_effects TEXT,
+    contraindication TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS bookings (
+-- Bảng hiệu thuốc
+CREATE TABLE IF NOT EXISTS pharmacies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id INTEGER NOT NULL,
-    user_name TEXT NOT NULL,
-    booking_date TEXT NOT NULL,
-    start_time TEXT NOT NULL,
-    end_time TEXT NOT NULL,
-    purpose TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES rooms(id)
-);
-
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    full_name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('admin', 'staff', 'student')),
+    name TEXT NOT NULL,
+    address TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    phone TEXT,
+    opening_hours TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Bảng kho hàng (thuốc tại hiệu thuốc)
+CREATE TABLE IF NOT EXISTS inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pharmacy_id INTEGER NOT NULL,
+    drug_id INTEGER NOT NULL,
+    quantity INTEGER DEFAULT 0,
+    price REAL NOT NULL,
+    FOREIGN KEY (pharmacy_id) REFERENCES pharmacies(id),
+    FOREIGN KEY (drug_id) REFERENCES drugs(id),
+    UNIQUE(pharmacy_id, drug_id)
+);
+
+-- Bảng cạnh đồ thị (cho tính toán đường đi)
+CREATE TABLE IF NOT EXISTS graph_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_lat REAL NOT NULL,
+    from_lng REAL NOT NULL,
+    to_lat REAL NOT NULL,
+    to_lng REAL NOT NULL,
+    distance REAL NOT NULL
+);
+
+-- Index để tối ưu tìm kiếm
+CREATE INDEX IF NOT EXISTS idx_drugs_name ON drugs(name);
+CREATE INDEX IF NOT EXISTS idx_pharmacies_coords ON pharmacies(latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_inventory_pharmacy ON inventory(pharmacy_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_drug ON inventory(drug_id);
