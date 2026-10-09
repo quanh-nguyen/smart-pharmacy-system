@@ -9,10 +9,10 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 // Mock pharmacy data
 const pharmacies = [
-    { id: 1, name: 'Nhà Thuốc Trung Ương', lat: 21.0085, lng: 105.8248, phone: '02438335566' },
-    { id: 2, name: 'Nhà Thuốc An Thịnh', lat: 21.0173, lng: 105.8144, phone: '02435568888' },
-    { id: 3, name: 'Nhà Thuốc Thanh Bình', lat: 21.0285, lng: 105.8542, phone: '02437688999' },
-    { id: 4, name: 'Nhà Thuốc Phương Nam', lat: 21.0295, lng: 105.8540, phone: '02437777888' }
+    { id: 1, name: 'Nhà Thuốc ', lat: 21.0085, lng: 105.8248, phone: '' },
+    { id: 2, name: 'Nhà Thuốc ', lat: 21.0173, lng: 105.8144, phone: '' },
+    { id: 3, name: 'Nhà Thuốc', lat: 21.0285, lng: 105.8542, phone: '' },
+    { id: 4, name: 'Nhà Thuốc', lat: 21.0295, lng: 105.8540, phone: '' }
 ];
 
 // Add pharmacy markers to map
