@@ -1,5 +1,12 @@
+(900px, calc(100% - 32px)); margin: auto; }
 
+header {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+}
 
+.nav {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   height: 68px;
@@ -334,4 +341,132 @@ h2 { margin: 18px 0 8px; font-size: 25px; }
   right: 22px;
   bottom: 22px;
   z-index: 30;
+}
+.widget-trigger {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 17px;
+  border: 0;
+  border-radius: 25px;
+  background: #2563c9;
+  color: white;
+  box-shadow: 0 10px 25px rgba(37, 99, 201, .28);
+  font-weight: 600;
+}
+.widget-trigger span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: white;
+  color: #2563c9;
+  font-size: 20px;
+}
+.widget-card {
+  position: absolute;
+  right: 0;
+  bottom: 58px;
+  width: min(380px, calc(100vw - 30px));
+  padding: 18px;
+  border: 1px solid #dbe3ef;
+  border-radius: 15px;
+  background: white;
+  box-shadow: 0 15px 40px rgba(23, 32, 51, .2);
+}
+.widget-card.hidden { display: none; }
+.widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 15px;
+}
+.widget-header strong, .widget-header small { display: block; }
+.widget-header small { margin-top: 3px; color: #64748b; font-size: 11px; }
+.widget-header > button {
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font-size: 22px;
+}
+
+.status { min-height: 22px; margin: 18px 0 0; text-align: center; color: #52627a; font-size: 14px; }
+.results { padding-bottom: 70px; }
+.results.hidden { display: none; }
+.results-title {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.results-title h2 { margin-top: 6px; }
+.results-title > span { color: #64748b; font-size: 12px; }
+.pharmacy-list { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 14px; background: white; }
+.pharmacy-list article {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 15px;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.pharmacy-list article:last-child { border: 0; }
+.marker {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: #2563c9;
+  font-weight: 700;
+}
+.pharmacy-list h3 { margin: 0; font-size: 15px; }
+.pharmacy-list p { margin: 5px 0; color: #64748b; font-size: 13px; }
+.pharmacy-list small { color: #16845b; }
+.pharmacy-list strong { color: #2563c9; font-size: 13px; }
+.pharmacy-link { color: #2563c9; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.pharmacy-link:hover { text-decoration: underline; }
+
+footer {
+  padding: 25px;
+  border-top: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  text-align: center;
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .hero { padding-top: 50px; }
+  .nav-actions { gap: 4px; }
+  .auth-button { padding: 8px 7px; font-size: 10px; }
+  .pharmacy-search { width: 38px; }
+  .pharmacy-search input { color: transparent; }
+  .pharmacy-search input:focus, .pharmacy-search input:not(:placeholder-shown) { width: min(280px, 80vw); color: #172033; }
+  .pharmacy-suggestions { right: 0; }
+  .tabs { flex-wrap: wrap; }
+  .tab { min-width: 40%; font-size: 11px; }
+  .panel { min-height: 330px; padding: 35px 16px; }
+  .results-title > span { display: none; }
+  .pharmacy-list article { grid-template-columns: auto 1fr; }
+  .pharmacy-link { grid-column: 2; }
+  .owner-dashboard { padding-top: 25px; }
+  .dashboard-heading { align-items: start; gap: 12px; }
+  .dashboard-heading h2 { font-size: 20px; }
+  .dashboard-panel { padding: 18px 14px; }
+  .form-row, .form-row-three { grid-template-columns: 1fr; gap: 0; }
+  .secondary-button { margin: 10px 0 0; }
+  .symptom-widget { right: 14px; bottom: 14px; }
+  .widget-trigger { font-size: 12px; }
+}
+
+/* Khu vực hiển thị bản đồ */
+#map {
+  width: 100%;
+  height: 400px;
+  margin: 20px 0;
+  border-radius: 12px;
+  z-index: 1;
 }
