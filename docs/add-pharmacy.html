@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Đề xuất thêm nhà thuốc vào bản đồ Smart Pharmacy." />
+  <title>Đề xuất nhà thuốc | Smart Pharmacy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./add-pharmacy.css" />
+</head>
+<body class="add-pharmacy-page">
+  <header>
+    <div class="container nav">
+      <a class="logo" href="./index.html"><span>+</span> Nhà Thuốc Gần Tôi</a>
+      <a class="back-home" href="./index.html">← Quay lại bản đồ</a>
+    </div>
+  </header>
+  <main class="container add-pharmacy-main">
+    <a class="back-link" href="./index.html">← Trang chủ</a>
+    <section class="add-pharmacy-intro">
+      <span class="add-pharmacy-kicker">ĐÓNG GÓP CHO CỘNG ĐỒNG</span>
+      <h1>Đề xuất thêm nhà thuốc</h1>
+      <p>Biết một nhà thuốc chưa có trên bản đồ? Hãy gửi thông tin để giúp mọi người tìm địa điểm thuận tiện hơn.</p>
+    </section>
+    <form id="addPharmacyForm" class="add-pharmacy-form" novalidate>
+      <div class="form-heading">
+        <h2>Thông tin nhà thuốc</h2>
+        <p>Các mục có dấu <span aria-hidden="true">*</span> là bắt buộc. Không cần đăng nhập.</p>
+      </div>
+      <div class="form-field">
+        <label for="newPharmacyName">Tên nhà thuốc <span>*</span></label>
+        <input id="newPharmacyName" name="name" required maxlength="120" placeholder="Ví dụ: Nhà thuốc Minh Tâm" autocomplete="organization" />
+      </div>
+      <div class="form-field">
+        <label for="newPharmacyAddress">Địa chỉ đầy đủ <span>*</span></label>
+        <input id="newPharmacyAddress" name="address" required maxlength="240" placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành" autocomplete="street-address" />
+        <small>Nhập địa chỉ cụ thể để người khác dễ tìm đúng địa điểm.</small>
+      </div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="newPharmacyPhone">Số điện thoại</label>
+          <input id="newPharmacyPhone" name="phone" type="tel" maxlength="30" placeholder="Số điện thoại liên hệ" autocomplete="tel" />
+        </div>
+        <div class="form-field">
+          <label for="newPharmacyHours">Giờ mở cửa</label>
+          <input id="newPharmacyHours" name="hours" maxlength="100" placeholder="Ví dụ: 7:00–22:00" />
+        </div>
+      </div>
+      <div class="form-field">
+        <label for="newPharmacyWebsite">Website (nếu có)</label>
+        <input id="newPharmacyWebsite" name="website" type="url" maxlength="240" placeholder="https://..." autocomplete="url" />
+      </div>
+      <div class="form-field">
+        <label for="newPharmacyNote">Thông tin bổ sung</label>
+        <textarea id="newPharmacyNote" name="note" rows="3" maxlength="500" placeholder="Mốc nhận biết, giờ nghỉ, thông tin hữu ích khác..."></textarea>
+      </div>
+      <label class="consent-row"><input id="newPharmacyConfirm" type="checkbox" required /> <span>Tôi đã kiểm tra thông tin và tin rằng đây là nhà thuốc có thật.</span></label>
+      <div class="form-actions">
+        <button class="primary" type="submit">Gửi đề xuất</button>
+        <a class="cancel-link" href="./index.html">Hủy</a>
+      </div>
+      <p id="addPharmacyStatus" class="add-pharmacy-status" role="status" aria-live="polite"></p>
+      <div class="submission-note"><strong>Lưu ý:</strong> Website hiện chạy ở chế độ frontend. Biểu mẫu này lưu bản nháp trên trình duyệt đang sử dụng; để chuyển đề xuất đến ban quản trị và dùng chung giữa các thiết bị, cần kết nối dịch vụ lưu trữ dữ liệu.</div>
+    </form>
+  </main>
+  <footer>Smart Pharmacy · Cùng xây dựng bản đồ nhà thuốc hữu ích hơn</footer>
+  <script src="./add-pharmacy.js"></script>
+</body>
+</html>
