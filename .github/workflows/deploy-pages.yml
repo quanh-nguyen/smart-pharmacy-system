@@ -1,0 +1,46 @@
+
+name: Deploy MEDIBRIDGE Frontend to GitHub Pages
+
+on:
+  push:
+    branches:
+      - web-demo
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Check frontend files
+        run: |
+          test -f docs/backend-demo/public/index.html
+          ls -la docs/backend-demo/public
+
+      - name: Upload frontend to Pages
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./docs/backend-demo/public
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
