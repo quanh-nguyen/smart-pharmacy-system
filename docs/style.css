@@ -472,6 +472,11 @@ h2 { margin: 18px 0 8px; font-size: 25px; }
 .results-title h2 { margin-top: 6px; }
 .results-title > span { color: #64748b; font-size: 12px; }
 .pharmacy-list { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 14px; background: white; }
+.pharmacy-list-state { padding: 24px; text-align: center; }
+.pharmacy-list .pharmacy-list-state > strong { display: block; font-size: 16px; }
+.pharmacy-list-state > p { margin: 10px 0 0; }
+.pharmacy-list-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.pharmacy-list-actions button { margin: 0; }
 .pharmacy-list article {
   display: grid;
   grid-template-columns: auto 1fr auto;
