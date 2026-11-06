@@ -18,6 +18,7 @@
         <a class="owner-link" href="./pharmacy/index.html">Bạn là chủ hiệu thuốc?</a>
         <div class="nav-account-actions">
           <span class="customer-nav-greeting hidden" id="customerNavGreeting"></span>
+          <button class="account-nav-button hidden" id="customerHistoryButton" type="button" aria-controls="customerDashboard">Lịch sử đơn thuốc</button>
           <button class="account-nav-button" id="customerLoginButton" type="button">Đăng nhập</button>
           <button class="account-nav-button account-nav-primary" id="customerRegisterButton" type="button">Tạo tài khoản</button>
         </div>
@@ -90,7 +91,7 @@
           <button class="primary find-button" id="prescriptionButton" disabled>Tìm nhà thuốc phù hợp</button>
         </div>
 
-        <p class="status" id="status"></p>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
       </section>
 
       <section class="container results hidden" id="results">
@@ -105,8 +106,8 @@
         <div class="search-filters" aria-label="Bộ lọc tìm nhà thuốc">
           <label for="searchRadius">Bán kính tìm kiếm</label>
           <select id="searchRadius">
-            <option value="1000">Trong 1 km</option>
-            <option value="3000" selected>Trong 3 km</option>
+            <option value="1000" selected>Trong 1 km</option>
+            <option value="3000">Trong 3 km</option>
             <option value="5000">Trong 5 km</option>
             <option value="10000">Trong 10 km</option>
           </select>
