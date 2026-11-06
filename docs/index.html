@@ -99,6 +99,7 @@
           <div>
             <p class="tag">KẾT QUẢ</p>
             <h2>Nhà thuốc gần bạn</h2>
+            <p class="filter-hint" id="pharmacyResultSummary" role="status"></p>
           </div>
           <span id="resultNote">Sắp xếp theo khoảng cách</span>
         </div>
@@ -106,16 +107,16 @@
         <div class="search-filters" aria-label="Bộ lọc tìm nhà thuốc">
           <label for="searchRadius">Bán kính tìm kiếm</label>
           <select id="searchRadius">
-            <option value="1000" selected>Trong 1 km</option>
-            <option value="3000">Trong 3 km</option>
+            <option value="1000">Trong 1 km</option>
+            <option value="3000" selected>Trong 3 km</option>
             <option value="5000">Trong 5 km</option>
             <option value="10000">Trong 10 km</option>
           </select>
-          <p class="filter-hint">Khoảng cách hiển thị là khoảng cách đường chim bay; tuyến đường thực tế có thể dài hơn.</p>
+          <p class="filter-hint">Đổi bán kính để tìm lại nhà thuốc. Dữ liệu từ OpenStreetMap có thể chưa đầy đủ. Khoảng cách hiển thị là đường chim bay.</p>
         </div>
         <div id="map"></div>
 
-        <div class="pharmacy-list" id="pharmacyList"></div>
+        <div class="pharmacy-list" id="pharmacyList" role="region" aria-label="Danh sách nhà thuốc tìm được"></div>
         <aside class="add-pharmacy-prompt" aria-label="Đóng góp nhà thuốc">
           <div class="add-pharmacy-prompt-icon" aria-hidden="true">+</div>
           <div class="add-pharmacy-prompt-copy">
