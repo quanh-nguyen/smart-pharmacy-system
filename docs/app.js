@@ -778,7 +778,9 @@ addListener(document.querySelector("#closeWidget"), "click", () => symptomWidget
 let pharmacySearchBusy = false;
 let lastPharmacySearch = null;
 const SEARCH_REQUEST_TIMEOUT_MS = 15000;
-const OVERPASS_REQUEST_TIMEOUT_MS = 12000;
+// Cho phép máy chủ xếp hàng, chạy truy vấn và truyền hết nội dung JSON trước khi hủy.
+const OVERPASS_REQUEST_TIMEOUT_MS = 45000;
+const OVERPASS_QUERY_TIMEOUT_SECONDS = 25;
 const OVERPASS_FALLBACK_DELAY_MS = 4000;
 // Hai nguồn toàn cầu được Overpass Turbo liệt kê: https://github.com/tyrasd/overpass-turbo/blob/master/js/configs.ts
 const OVERPASS_SERVERS = [
@@ -878,7 +880,7 @@ async function findPharmacies(mode = "normal", knownOrigin = null) {
     statusText.textContent = "Đã xác định vị trí. Đang tìm nhà thuốc gần bạn…";
     results.scrollIntoView({ behavior: "smooth", block: "start" });
 
-    const nearby = await fetchNearbyPharmacies(origin.lat, origin.lon, radius);
+    const { items: nearby, incomplete } = await fetchNearbyPharmacies(origin.lat, origin.lon, radius);
     renderMapPharmacies(nearby, mapMode, origin);
     resultNote.textContent = nearby.length
       ? (mode === "normal" ? "Chọn nhà thuốc để xem đường đi" : "Vui lòng xác nhận thuốc còn hàng với nhà thuốc")
@@ -886,7 +888,15 @@ async function findPharmacies(mode = "normal", knownOrigin = null) {
     statusText.textContent = nearby.length
       ? `Tìm thấy ${nearby.length} nhà thuốc có dữ liệu trong bán kính ${formatRadius(radius)}.`
       : `Chưa có nhà thuốc được ghi nhận trong phạm vi ${formatRadius(radius)}. Bạn có thể mở rộng phạm vi tìm kiếm.`;
-    if (!nearby.length) showPharmacyListState("empty", statusText.textContent);
+    if (incomplete) {
+      const message = nearby.length
+        ? `Đã tìm thấy ${nearby.length} nhà thuốc. Nguồn dữ liệu chưa trả đủ kết quả; bạn có thể thử lại để bổ sung.`
+        : "Nguồn dữ liệu chưa trả đủ kết quả cho phạm vi này. Vui lòng thử lại.";
+      statusText.textContent = message;
+      showPharmacyListState(nearby.length ? "partial" : "error", message);
+    } else if (!nearby.length) {
+      showPharmacyListState("empty", statusText.textContent);
+    }
   } catch (error) {
     statusText.textContent = error.message || "Không thể tìm nhà thuốc lúc này.";
     resultNote.textContent = "Chưa tải được kết quả. Hãy bấm tìm lại.";
@@ -940,6 +950,7 @@ addListener(pharmacyList, "click", (event) => {
 function showPharmacyListState(state, message) {
   document.querySelector("#pharmacyResultSummary").textContent = state === "loading"
     ? "Đang tải danh sách nhà thuốc…"
+    : state === "partial" ? message
     : state === "empty" ? "Chưa có kết quả trong phạm vi đã chọn."
     : "Chưa tải được danh sách nhà thuốc. Bạn có thể thử lại bên dưới.";
   const panel = document.createElement("div");
@@ -947,6 +958,7 @@ function showPharmacyListState(state, message) {
   panel.dataset.state = state;
   const title = document.createElement("strong");
   title.textContent = state === "loading" ? "Đang tìm nhà thuốc…"
+    : state === "partial" ? "Đã tải được một phần danh sách nhà thuốc"
     : state === "empty" ? "Chưa tìm thấy nhà thuốc trong phạm vi đã chọn"
     : "Chưa tải được danh sách nhà thuốc";
   const description = document.createElement("p");
@@ -991,7 +1003,8 @@ function showPharmacyListState(state, message) {
     }
     panel.appendChild(actions);
   }
-  pharmacyList.replaceChildren(panel);
+  if (state === "partial") pharmacyList.prepend(panel);
+  else pharmacyList.replaceChildren(panel);
 }
 
 let pharmacyMap = null;
@@ -1166,7 +1179,7 @@ function normalizeMapPharmacy(item) {
 
 function buildPharmacyQuery(bbox) {
   return `
-    [out:json][timeout:8];
+    [out:json][timeout:${OVERPASS_QUERY_TIMEOUT_SECONDS}];
     (
       nwr["amenity"="pharmacy"](${bbox});
       nwr["healthcare"="pharmacy"](${bbox});
@@ -1177,6 +1190,7 @@ function buildPharmacyQuery(bbox) {
 
 async function requestOverpassData(query) {
   const controller = new AbortController();
+  const sources = [];
   let timedOut = false;
   let startFallback;
   const fallbackReady = new Promise((resolve) => { startFallback = resolve; });
@@ -1186,22 +1200,37 @@ async function requestOverpassData(query) {
     controller.abort();
     startFallback();
   }, OVERPASS_REQUEST_TIMEOUT_MS);
+  const slowResponseTimer = window.setTimeout(() => {
+    const loadingMessage = pharmacyList.querySelector('[data-state="loading"] p');
+    if (loadingMessage) loadingMessage.textContent = "Dịch vụ dữ liệu đang phản hồi chậm. Hệ thống vẫn đang chờ danh sách nhà thuốc…";
+  }, 12000);
 
   const request = async (url) => {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ data: query }),
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error("Máy chủ dữ liệu nhà thuốc đang bận. Hãy thử lại sau.");
-    const data = await response.json();
-    // Không hiển thị kết quả thiếu tọa độ hoặc một phản hồi lỗi HTTP 200 như danh sách rỗng.
-    if (!data || data.remark || !Array.isArray(data.elements) ||
-        (data.elements.length && !data.elements.some(normalizeMapPharmacy))) {
-      throw new Error("Dịch vụ tìm kiếm chưa trả được dữ liệu nhà thuốc đầy đủ. Vui lòng thử lại.");
+    const source = { server: new URL(url).hostname, status: null, stage: "headers", error: null };
+    sources.push(source);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ data: query }),
+        signal: controller.signal
+      });
+      source.status = response.status;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      source.stage = "body";
+      const data = await response.json();
+      // Kết quả có remark vẫn dùng được nếu chứa nhà thuốc có tọa độ; giao diện đánh dấu chưa đầy đủ.
+      const hasCoordinates = Array.isArray(data?.elements) && data.elements.some(normalizeMapPharmacy);
+      if (!Array.isArray(data?.elements) ||
+          ((data.remark || data.elements.length) && !hasCoordinates)) {
+        throw new Error("InvalidOverpassData");
+      }
+      source.stage = "complete";
+      return data;
+    } catch (error) {
+      source.error = error.name === "Error" ? error.message : error.name;
+      throw error;
     }
-    return data;
   };
 
   try {
@@ -1210,14 +1239,24 @@ async function requestOverpassData(query) {
       throw error;
     });
     // Chỉ gọi nguồn dự phòng khi nguồn chính lỗi hoặc chờ quá 4 giây.
-    const fallback = fallbackReady.then(() => request(OVERPASS_SERVERS[1]));
+    const fallback = fallbackReady.then(() => {
+      controller.signal.throwIfAborted();
+      return request(OVERPASS_SERVERS[1]);
+    });
     return await Promise.any([primary, fallback]);
-  } catch {
-    if (timedOut) throw new Error("Dịch vụ tìm nhà thuốc phản hồi quá lâu. Vui lòng thử lại.");
-    throw new Error("Chưa tải được danh sách nhà thuốc. Vui lòng kiểm tra kết nối và thử lại.");
+  } catch (cause) {
+    // Chỉ ghi trạng thái nguồn; không ghi truy vấn hoặc tọa độ của người dùng vào Console.
+    console.warn("[Smart Pharmacy] Overpass search failed", { timedOut, sources });
+    const message = timedOut
+      ? "Dịch vụ tìm nhà thuốc phản hồi quá lâu sau 45 giây. Vui lòng thử lại."
+      : sources.some((source) => source.status === 429)
+        ? "Dịch vụ tìm nhà thuốc đang giới hạn lượt truy cập. Vui lòng đợi rồi thử lại."
+        : "Chưa tải được danh sách nhà thuốc. Vui lòng kiểm tra kết nối và thử lại.";
+    throw new Error(message, { cause });
   } finally {
     window.clearTimeout(fallbackTimer);
     window.clearTimeout(timeout);
+    window.clearTimeout(slowResponseTimer);
     controller.abort();
   }
 }
@@ -1234,6 +1273,8 @@ async function fetchPharmacyData(query) {
 
   const request = (async () => {
     const data = await requestOverpassData(query);
+    // Không lưu một danh sách chưa đầy đủ như kết quả hoàn chỉnh cho các lần tìm sau.
+    if (data.remark) return data;
     if (pharmacySearchCache.size >= PHARMACY_CACHE_MAX_ENTRIES) {
       pharmacySearchCache.delete(pharmacySearchCache.keys().next().value);
     }
@@ -1263,10 +1304,11 @@ async function fetchPharmaciesNearGeoJSONArea(geometry, radius = 3000) {
   const east = bounds.east + paddingLon;
   const bbox = `${south},${west},${north},${east}`;
   const data = await fetchPharmacyData(buildPharmacyQuery(bbox));
-  return data.elements.map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
+  const items = data.elements.map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
     ...pharmacy,
     distance: distanceToGeoJSONAreaKm(pharmacy.lat, pharmacy.lon, geometry)
   })).filter((pharmacy) => pharmacy.distance <= radius / 1000).sort((a, b) => a.distance - b.distance);
+  return { items, incomplete: Boolean(data.remark) };
 }
 
 async function fetchNearbyPharmacies(latitude, longitude, radius = 3000) {
@@ -1285,10 +1327,11 @@ async function fetchNearbyPharmacies(latitude, longitude, radius = 3000) {
   // Truy vấn khung chữ nhật có chỉ mục, rồi lọc đúng bán kính ở phía trình duyệt.
   const bbox = `${south},${west},${north},${east}`;
   const data = await fetchPharmacyData(buildPharmacyQuery(bbox));
-  return data.elements.map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
+  const items = data.elements.map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
     ...pharmacy,
     distance: calculateDistanceKm(latitude, longitude, pharmacy.lat, pharmacy.lon)
   })).filter((pharmacy) => pharmacy.distance <= radius / 1000).sort((a, b) => a.distance - b.distance);
+  return { items, incomplete: Boolean(data.remark) };
 }
 
 function clearMapLayers() {
@@ -1471,7 +1514,7 @@ async function searchPharmaciesByAddress(knownLocation = null) {
       resultsTitle.textContent = "Nhà thuốc quanh địa chỉ đã chọn";
     }
 
-    const nearbyPharmacies = isAreaSearch && hasAreaGeometry
+    const { items: nearbyPharmacies, incomplete } = isAreaSearch && hasAreaGeometry
       ? await fetchPharmaciesNearGeoJSONArea(location.geojson, radius)
       : await fetchNearbyPharmacies(latitude, longitude, radius);
     renderMapPharmacies(nearbyPharmacies, "address");
@@ -1481,7 +1524,15 @@ async function searchPharmaciesByAddress(knownLocation = null) {
     statusText.textContent = nearbyPharmacies.length
       ? `Tìm thấy ${nearbyPharmacies.length} nhà thuốc ${isAreaSearch && hasAreaGeometry ? `trong khu vực và cách ranh giới không quá ${formatRadius(radius)}` : `trong bán kính ${formatRadius(radius)}`}.`
       : "Không tìm thấy nhà thuốc có dữ liệu quanh địa chỉ này.";
-    if (!nearbyPharmacies.length) showPharmacyListState("empty", statusText.textContent);
+    if (incomplete) {
+      const message = nearbyPharmacies.length
+        ? `Đã tìm thấy ${nearbyPharmacies.length} nhà thuốc. Nguồn dữ liệu chưa trả đủ kết quả; bạn có thể thử lại để bổ sung.`
+        : "Nguồn dữ liệu chưa trả đủ kết quả cho phạm vi này. Vui lòng thử lại.";
+      statusText.textContent = message;
+      showPharmacyListState(nearbyPharmacies.length ? "partial" : "error", message);
+    } else if (!nearbyPharmacies.length) {
+      showPharmacyListState("empty", statusText.textContent);
+    }
   } catch (error) {
     statusText.textContent =
       error.message || "Có lỗi khi tìm kiếm địa chỉ.";
