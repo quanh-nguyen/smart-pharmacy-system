@@ -1,3 +1,5 @@
+import { apiEnabled, apiRequest, getSession, saveSession, signIn, signOut } from "./api-client.js";
+import { renderApiHistory, setupCustomerOrdering } from "./customer-api.js";
 import { boundsContain, findPharmacyCatalog, getMapCoordinates, getSearchBounds, prefetchPharmacyCatalog, validBounds } from "./pharmacy-catalog.js";
 
 const tabs = document.querySelectorAll(".tab");
@@ -47,6 +49,10 @@ const customerNameField = document.querySelector("#customerNameField");
 const customerNameInput = document.querySelector("#authCustomerName");
 let activeCustomer = (() => {
   try {
+    if (apiEnabled) {
+      const user = getSession()?.user;
+      return user?.role === "CUSTOMER" ? { ...user, role: "customer" } : null;
+    }
     const saved = sessionStorage.getItem("smartPharmacyActiveCustomer");
     return saved ? JSON.parse(saved) : null;
   } catch {
@@ -297,10 +303,25 @@ document.querySelectorAll(".account-type").forEach((button) => {
     customerNameInput.required = authMode === "register" && selectedRole === "customer";
   });
 });
-addListener(authForm, "submit", (event) => {
+addListener(authForm, "submit", async (event) => {
   event.preventDefault();
   const email = authEmail.value.trim().toLowerCase();
   const password = authPassword.value;
+  if (apiEnabled) {
+    if (selectedRole === "owner") { window.location.href = new URL("./pharmacy/", window.location.href); return; }
+    authSubmit.disabled = true;
+    try {
+      const data = await signIn(email, password, { register: authMode === "register", role: "CUSTOMER", name: customerNameInput.value.trim() });
+      if (data.user?.role !== "CUSTOMER") {
+        window.location.href = new URL(data.user?.role === "ADMIN" || data.mfaEnrollmentRequired ? "./admin/" : "./pharmacy/", window.location.href);
+        return;
+      }
+      activeCustomer = { ...data.user, role: "customer" };
+      authForm.reset(); updateCustomerHeader(); authModal.classList.add("hidden"); openCustomerDashboard();
+    } catch (error) { authStatus.textContent = error.message; }
+    finally { authSubmit.disabled = false; }
+    return;
+  }
   if (isAdminRoute) {
     if (authMode !== "login" || email !== "admin@smartpharmacy.vn" || password !== "admin123") {
       authStatus.textContent = "Thông tin quản trị không đúng.";
@@ -364,6 +385,7 @@ function openCustomerDashboard() {
 }
 
 function renderCustomerHistory() {
+  if (apiEnabled) return renderApiHistory();
   const allData = getAllOwnerData();
   const email = (activeCustomer?.email || "").toLowerCase();
   const name = normalizeText(activeCustomer?.name || "");
@@ -386,7 +408,8 @@ function returnToPharmacySearch() {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-addListener(document.querySelector("#customerLogoutButton"), "click", () => {
+addListener(document.querySelector("#customerLogoutButton"), "click", async () => {
+  if (apiEnabled) { try { await signOut(); } catch (error) { console.warn(error.message); } }
   activeCustomer = null;
   sessionStorage.removeItem("smartPharmacyActiveCustomer");
   updateCustomerHeader();
@@ -1641,4 +1664,17 @@ updateCustomerHeader();
 prefetchPharmacyCatalog();
 if (!isAdminRoute && activeCustomer && activeCustomer.role === "customer") {
   openCustomerDashboard();
+}
+
+if (apiEnabled) {
+  document.querySelector('.customer-demo-note').textContent = 'Lịch sử được lưu trên hệ thống và gắn với tài khoản đã đăng nhập.';
+  authPassword.minLength = 8;
+  setupCustomerOrdering();
+  if (getSession()) apiRequest('/api/v1/me').then(result => {
+    saveSession({ ...getSession(), user: result.data.user });
+    activeCustomer = result.data.user.role === 'CUSTOMER' ? { ...result.data.user, role: 'customer' } : null;
+    updateCustomerHeader();
+  }).catch(error => {
+    if (error.status === 401) { activeCustomer = null; updateCustomerHeader(); }
+  });
 }
