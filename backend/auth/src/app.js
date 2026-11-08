@@ -14,7 +14,7 @@ const pharmacyRoutes = require('./routes/pharmacyRoutes');
 const { createAuthRateLimiters } = require('./middlewares/rateLimiters');
 const { setDeprecationHeaders } = require('./middlewares/deprecationHeaders');
 
-const createApp = ({ redisClient = null } = {}) => {
+const createApp = ({ redisClient = null, mountApplicationRoutes = null, helmetOptions } = {}) => {
   const app = express();
 
   app.disable('x-powered-by');
@@ -22,7 +22,7 @@ const createApp = ({ redisClient = null } = {}) => {
   if (env.trustProxy !== false) app.set('trust proxy', env.trustProxy);
 
   app.use(requestLogger);
-  app.use(helmet());
+  app.use(helmet(helmetOptions));
   app.use(cors({
     exposedHeaders: ['X-Security-Operation-Id', 'X-Idempotency-Key', 'X-Refresh-Request-Id'],
     origin(origin, callback) {
@@ -35,7 +35,10 @@ const createApp = ({ redisClient = null } = {}) => {
     allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key']
   }));
 
-  app.use(express.json({ limit: '10kb', strict: true }));
+  const authJson = express.json({ limit: '10kb', strict: true });
+  if (mountApplicationRoutes) {
+    app.use(['/api/v1/auth', '/api/auth', '/api/v1/admin', '/api/v2/admin', '/api/admin', '/api/v1/pharmacy'], authJson);
+  } else app.use(authJson);
 
   const limiters = createAuthRateLimiters(redisClient);
 
@@ -49,6 +52,8 @@ const createApp = ({ redisClient = null } = {}) => {
   app.use('/api/v2/admin', createAdminRoutes(limiters, { version: 'v2' }));
   app.use('/api/admin', legacyAdminRoutes(limiters));
   app.use('/api/v1/pharmacy', pharmacyRoutes);
+
+  if (mountApplicationRoutes) mountApplicationRoutes(app);
 
   app.use(notFound);
   app.use(errorHandler);
