@@ -1,0 +1,46 @@
+{
+  "name": "smart-medicine-auth-refactor",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Authentication and authorization module for a smart medicine platform",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.16.0 <23",
+    "npm": ">=10.9.2 <11"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "create-admin": "node src/scripts/createAdmin.js",
+    "migrate": "node src/scripts/migrate.js",
+    "test": "node --test tests/*.test.cjs",
+    "test:watch": "node --test --watch tests/*.test.cjs",
+    "mfa:reencrypt": "node src/scripts/reencryptMfaSecrets.js",
+    "preflight:refresh": "node src/scripts/batchLegacyRefresh.js",
+    "mail:worker": "node src/workers/emailOutbox.js",
+    "preflight:emails": "node src/scripts/emailCanonicalizationPreflight.js",
+    "outbox:rewrap": "node src/scripts/rewrapMailOutbox.js",
+    "outbox:keys:check": "node src/scripts/auditMailOutboxKeys.js",
+    "export:legacy-ids": "node src/scripts/exportLegacyIds.js",
+    "db:purge": "node src/scripts/purgeExpired.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.2",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
+    "rate-limit-redis": "^6.0.1",
+    "zod": "^4.6.5",
+    "mysql2": "^3.15.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
+  },
+  "packageManager": "npm@10.9.2"
+}
