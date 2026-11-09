@@ -76,6 +76,15 @@ test('shared MySQL workflow and permissions across all three backend packages', 
       const user = await User.findById(owner.user.id).lean(); assert.equal(user.isVerified, true);
       const [audit] = await db.execute('SELECT id FROM pharmacyverificationevents WHERE pharmacy_id = ?', [owner.user.id]); assert.equal(audit.length, 1);
       await request(app).get(`/api/pharmacies/${storeId}`).expect(200);
+      const detailPath = `/api/admin/pharmacies/${storeId}`;
+      await request(app).get(detailPath).expect(401);
+      await auth('get', detailPath, customer.accessToken).expect(403);
+      const detail = (await auth('get', detailPath, adminToken).expect(200)).body.data;
+      assert.equal(detail.owner_name, 'Test PHARMACY');
+      assert.equal(detail.owner_email, owner.user.email);
+      assert.ok(detail.created_at);
+      const publicDetail = (await request(app).get(`/api/pharmacies/${storeId}`).expect(200)).body.data;
+      assert.equal(publicDetail.owner_email, undefined);
     });
     await t.test('approved owner can set inventory but customers cannot', async () => {
       const path = `/api/pharmacies/${storeId}/inventory/${medicineId}`;
