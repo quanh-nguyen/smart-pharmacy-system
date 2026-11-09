@@ -39,7 +39,7 @@ exports.getById = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const data = await service.create(req.body);
+  const data = await service.create(req.body, { ownerId: req.user.id });
   res.status(201).json({ success: true, data });
 };
 
@@ -71,11 +71,12 @@ exports.adminList = async (req, res) => {
 };
 
 exports.adminGetById = async (req, res) => {
-  const data = await service.getById(toInt(req.params.id, 'id', { min: 1 }));
+  const data = await service.getById(toInt(req.params.id, 'id', { min: 1 }), { includeOwner: true });
   res.json({ success: true, data });
 };
 
 exports.setVerification = async (req, res) => {
-  const data = await service.setVerification(toInt(req.params.id, 'id', { min: 1 }), (req.body || {}).status);
+  const data = await require('../../../../src/verification').setVerification(
+    toInt(req.params.id, 'id', { min: 1 }), (req.body || {}).status, req.user, req.id);
   res.json({ success: true, data });
 };
