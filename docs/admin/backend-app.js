@@ -1,5 +1,6 @@
 import { apiRequest, getSession, signIn, signOut, allPages } from '../api-client.js';
 import { escapeHtml as esc, installStyles, submitForm } from '../api-ui.js';
+import { openPharmacyDetails } from './pharmacy-details.js';
 installStyles();
 document.body.innerHTML = `<main class="api-page">
 <header><div><a href="../index.html">← Trang khách hàng</a><h1>Quản trị hệ thống</h1></div><button id="logout" class="hidden">Đăng xuất</button></header>
@@ -23,7 +24,7 @@ document.body.innerHTML = `<main class="api-page">
 <button type="submit">Lưu thuốc</button><button type="reset">Hủy chỉnh sửa</button></form><div id="medicines"></div></section>
 </div></main>`;
 const $ = selector => document.querySelector(selector), status = $('#status');
-let enrollmentToken, medicines = [];
+let enrollmentToken, medicines = [], pharmacies = [];
 $('#loginForm').onsubmit = event => submitForm(event, async values => {
   const data = await signIn(values.email, values.password, { totp: values.totp });
   if (data.mfaEnrollmentRequired) {
@@ -52,10 +53,12 @@ async function reload() {
     allPages('/api/admin/accounts'), allPages('/api/admin/pharmacies?status=all'), allPages('/api/medicines'),
   ]);
   medicines = catalog;
+  pharmacies = stores;
   $('#stats').textContent = `${accounts.length} tài khoản · ${stores.length} nhà thuốc · ${stores.filter(p => p.verification_status === 'pending').length} hồ sơ chờ duyệt`;
   const statusLabel = { approved: 'Đã duyệt', pending: 'Chờ duyệt', rejected: 'Từ chối' };
   $('#stores').innerHTML = stores.map(store => `<article><b>${esc(store.name)}</b><p>${esc(store.address)} · ${esc(store.phone)}</p>
     <p>${statusLabel[store.verification_status]} · Tọa độ: ${store.lat}, ${store.lng}</p>
+    <button type="button" data-store-details="${store.id}" aria-haspopup="dialog" aria-label="Xem chi tiết ${esc(store.name)}">Xem chi tiết</button>
     <button data-store="${store.id}" data-verification="approved">Duyệt</button>
     <button data-store="${store.id}" data-verification="rejected">Từ chối</button></article>`).join('') || '<p>Chưa có hồ sơ nhà thuốc.</p>';
   $('#accounts').innerHTML = accounts.map(account => `<article><b>${esc(account.name)}</b> · ${esc(account.email)} · ${esc(account.role)}
@@ -65,6 +68,15 @@ async function reload() {
   status.textContent = 'Đã tải dữ liệu hệ thống.';
 }
 $('#stores').onclick = async event => {
+  const detailsButton = event.target.closest('[data-store-details]');
+  if (detailsButton) {
+    const pharmacy = pharmacies.find(store => String(store.id) === detailsButton.dataset.storeDetails);
+    if (pharmacy) openPharmacyDetails(pharmacy, { loadDetails: async () => {
+      const result = await apiRequest(`/api/admin/pharmacies/${pharmacy.id}`);
+      return result.data;
+    } });
+    return;
+  }
   const button = event.target.closest('[data-store]'); if (!button) return; button.disabled = true;
   try {
     await apiRequest(`/api/admin/pharmacies/${button.dataset.store}/verification`, { method: 'PATCH', body: { status: button.dataset.verification } });
