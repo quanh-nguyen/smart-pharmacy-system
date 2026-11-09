@@ -61,9 +61,11 @@ async function list({ q, district, status, admin = false, openNow, at, sort, pag
 
 // publicOnly = true: chi tra nha thuoc dang hoat dong va da duoc xac thuc (dung cho API cong khai).
 // Noi bo / quan tri goi khong co publicOnly de thay moi nha thuoc.
-async function getById(id, { publicOnly = false } = {}) {
+async function getById(id, { publicOnly = false, includeOwner = false } = {}) {
   const publicSql = publicOnly ? ` AND p.is_active = 1 AND p.verification_status = 'approved'` : '';
-  const [rows] = await pool.query(`SELECT ${SELECT_FIELDS} FROM pharmacies p WHERE p.id = ?${publicSql}`, [id]);
+  const ownerFields = includeOwner ? ', p.created_at, owner.name AS owner_name, owner.email AS owner_email' : '';
+  const ownerJoin = includeOwner ? ' LEFT JOIN business_user_profiles owner ON owner.id = p.owner_id' : '';
+  const [rows] = await pool.query(`SELECT ${SELECT_FIELDS}${ownerFields} FROM pharmacies p${ownerJoin} WHERE p.id = ?${publicSql}`, [id]);
   if (!rows.length) throw new ApiError(404, 'Khong tim thay nha thuoc');
   return decoratePharmacy(rows[0], currentTimeVN());
 }
