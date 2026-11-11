@@ -18,6 +18,7 @@
         <a class="owner-link" href="./pharmacy/index.html">Bạn là chủ hiệu thuốc?</a>
         <div class="nav-account-actions">
           <span class="customer-nav-greeting hidden" id="customerNavGreeting"></span>
+          <button class="account-nav-button hidden" id="customerHistoryButton" type="button" aria-controls="customerDashboard">Lịch sử đơn thuốc</button>
           <button class="account-nav-button" id="customerLoginButton" type="button">Đăng nhập</button>
           <button class="account-nav-button account-nav-primary" id="customerRegisterButton" type="button">Tạo tài khoản</button>
         </div>
@@ -90,7 +91,7 @@
           <button class="primary find-button" id="prescriptionButton" disabled>Tìm nhà thuốc phù hợp</button>
         </div>
 
-        <p class="status" id="status"></p>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
       </section>
 
       <section class="container results hidden" id="results">
@@ -98,6 +99,7 @@
           <div>
             <p class="tag">KẾT QUẢ</p>
             <h2>Nhà thuốc gần bạn</h2>
+            <p class="filter-hint" id="pharmacyResultSummary" role="status"></p>
           </div>
           <span id="resultNote">Sắp xếp theo khoảng cách</span>
         </div>
@@ -110,11 +112,11 @@
             <option value="5000">Trong 5 km</option>
             <option value="10000">Trong 10 km</option>
           </select>
-          <p class="filter-hint">Khoảng cách hiển thị là khoảng cách đường chim bay; tuyến đường thực tế có thể dài hơn.</p>
+          <p class="filter-hint">Đổi bán kính để tìm lại nhà thuốc. Dữ liệu từ OpenStreetMap có thể chưa đầy đủ. Khoảng cách hiển thị là đường chim bay.</p>
         </div>
         <div id="map"></div>
 
-        <div class="pharmacy-list" id="pharmacyList"></div>
+        <div class="pharmacy-list" id="pharmacyList" role="region" aria-label="Danh sách nhà thuốc tìm được"></div>
         <aside class="add-pharmacy-prompt" aria-label="Đóng góp nhà thuốc">
           <div class="add-pharmacy-prompt-icon" aria-hidden="true">+</div>
           <div class="add-pharmacy-prompt-copy">
@@ -322,6 +324,7 @@
     </div>
 
     <footer>Hệ thống tìm nhà thuốc gần nhất</footer>
+    <script src="./runtime-config.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module" src="./app.js"></script>
   </body>

@@ -1,0 +1,19 @@
+{
+  "name": "smart-pharmacy-system-backend",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["auth", "catalog", "operations"],
+  "engines": {"node": ">=22.16.0 <23", "npm": ">=10.9.2 <11"},
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "init:local": "node scripts/init-local-env.js",
+    "migrate": "node scripts/migrate.js",
+    "create-admin": "node -r ./src/bootstrap.js auth/src/scripts/createAdmin.js",
+    "test": "npm run test --workspaces --if-present && node --test tests/*.test.cjs",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.cjs",
+    "mail:worker": "node -r ./src/bootstrap.js auth/src/workers/emailOutbox.js"
+  },
+  "dependencies": {"dotenv": "^16.4.7", "express": "^5.1.0"},
+  "devDependencies": {"supertest": "^7.0.0"}
+}
