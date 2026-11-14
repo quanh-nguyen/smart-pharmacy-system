@@ -1,0 +1,30 @@
+# Add this file alongside the existing docker-compose.yml that runs MySQL.
+# Start both files with:
+# docker compose -f docker-compose.yml -f docker-compose.api.yml up -d --build
+services:
+  api:
+    build:
+      context: ./backend
+    container_name: pharmacy-api
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: pharmacy_marketplace_demo
+      DB_USER: pharmacy_api
+      DB_PASSWORD: ${DB_PASSWORD:-change-me-api-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-this-jwt-secret-before-use}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-720}
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://sn-hwang.github.io,http://localhost:5500,http://127.0.0.1:5500,http://localhost:3000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - pharmacy_uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  pharmacy_uploads:

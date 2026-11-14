@@ -1,0 +1,21 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: pharmacy-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: local_root_password_change_me
+      MYSQL_DATABASE: pharmacy_marketplace_demo
+    ports:
+      - "3307:3306"
+    volumes:
+      - pharmacy_mysql_data:/var/lib/mysql
+      - ./pharmacy_marketplace.sql:/docker-entrypoint-initdb.d/001_pharmacy_marketplace.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-plocal_root_password_change_me"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pharmacy_mysql_data:
