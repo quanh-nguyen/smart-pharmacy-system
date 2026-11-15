@@ -28,6 +28,18 @@
 .checkout-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
 .checkout-section-heading h3 { margin: 0; font-size: 15px; color: #17345f; }
 .checkout-section-heading > span { color: #64748b; font-size: 10px; }
+.checkout-search { margin-bottom: 12px; }
+.checkout-search > label { display: block; margin-bottom: 7px; color: #334155; font-size: 12px; font-weight: 600; }
+.checkout-search-control { position: relative; }
+.checkout-search-control > span { position: absolute; top: 50%; left: 12px; transform: translateY(-50%); color: #64748b; font-size: 22px; pointer-events: none; }
+.checkout-search input { width: 100%; min-height: 43px; padding: 11px 38px 11px 37px; border: 1px solid #cbd9eb; border-radius: 9px; background: #f8fafd; color: #172033; font: inherit; font-size: 13px; }
+.checkout-search input:focus { outline: 2px solid #b5d3ff; outline-offset: 1px; border-color: #2563c9; background: #fff; }
+.checkout-search input::-webkit-search-cancel-button { display: none; }
+.checkout-search-clear { position: absolute; top: 50%; right: 7px; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #64748b; font-size: 22px; line-height: 1; }
+.checkout-search-clear:hover { background: #e6edf7; color: #245bb0; }
+#checkoutSearchStatus { margin: 8px 0 0; color: #64748b; font-size: 11px; line-height: 1.6; }
+.checkout-search-empty { margin: 12px 0; padding: 20px 16px; border: 1px dashed #cbd9eb; border-radius: 10px; background: #f8fafd; color: #526781; font-size: 13px; line-height: 1.7; text-align: center; }
+.checkout-product[hidden] { display: none; }
 .checkout-product { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; padding: 16px 0; border-bottom: 1px solid #e7edf5; }
 .checkout-product:first-child { padding-top: 4px; }
 .checkout-product-symbol { display: grid; place-items: center; height: 42px; border-radius: 10px; background: #eef4fc; color: #3571bd; font-size: 19px; }
