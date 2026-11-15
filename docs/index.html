@@ -89,15 +89,17 @@
           </label>
           <img id="preview" alt="Ảnh đơn thuốc đã chọn" />
           <div class="prescription-image-actions">
+            <a class="secondary-button hidden" id="openPrescriptionImage" target="_blank" rel="noopener noreferrer">Xem ảnh gốc</a>
             <button class="secondary-button hidden" id="removePrescriptionImage" type="button">Xóa ảnh đơn thuốc</button>
             <button class="secondary-button hidden" id="retryPrescriptionOcr" type="button">Đọc lại ảnh</button>
           </div>
           <p class="prescription-status" id="prescriptionOcrStatus" role="status" aria-live="polite"></p>
+          <details class="prescription-raw" id="prescriptionRawDetails" hidden><summary>Xem toàn bộ chữ đọc được từ ảnh</summary><label for="prescriptionRawText">Kết quả từng lần đọc để đối chiếu các dòng bị thiếu</label><textarea id="prescriptionRawText" rows="9" readonly spellcheck="false"></textarea></details>
           <div class="divider"><span>hoặc nhập tay</span></div>
           <label class="medicine-list-label" for="medicineInput">Danh sách thuốc (có thể sửa, mỗi thuốc một dòng)</label>
           <textarea id="medicineInput" rows="4" placeholder="Ví dụ: Paracetamol 500mg&#10;Vitamin C 500mg" aria-describedby="prescriptionReviewHint"></textarea>
           <ul class="prescription-medicines" id="prescriptionMedicines" aria-label="Thuốc cần tìm"></ul>
-          <p class="filter-hint" id="prescriptionReviewHint">Kiểm tra tên và hàm lượng với đơn gốc, nhất là chữ viết tay. Chỉ nhà thuốc có dữ liệu tồn kho khớp tất cả thuốc mới được hiển thị.</p>
+          <p class="filter-hint" id="prescriptionReviewHint">Dùng ảnh đơn thuốc in; kiểm tra đủ từng dòng tên thuốc và hàm lượng với ảnh gốc. Chỉ nhà thuốc có tồn kho khớp tất cả thuốc mới được hiển thị.</p>
           <label class="prescription-confirm"><input id="confirmPrescriptionMedicines" type="checkbox" disabled /> Tôi đã kiểm tra danh sách thuốc cần tìm.</label>
           <button class="primary find-button" id="prescriptionButton" disabled>Tìm nhà thuốc phù hợp</button>
         </div>
