@@ -71,6 +71,8 @@
 .address-hint, .address-status, .address-attribution { font-size: 11px; line-height: 1.7; color: #526781; }
 .address-status.is-verified { color: #157347; font-weight: 600; }
 .address-status.is-partial { color: #8a5a12; }
+.current-location-map { display: block; margin-top: 12px; font-size: 12px; line-height: 1.7; }
+.current-location-map[hidden], #deliveryDetailsRequired[hidden] { display: none; }
 .manual-address-confirmation { padding: 12px; border: 1px solid #ead4a8; border-radius: 9px; background: #fff8e9; }
 .manual-address-confirmation[hidden] { display: none; }
 .manual-address-confirmation p { margin: 0; color: #805b20; font-size: 12px; line-height: 1.7; }
