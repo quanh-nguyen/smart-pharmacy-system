@@ -4,6 +4,7 @@ const fs = require('node:fs');
 
 const source = fs.readFileSync(require.resolve('../../docs/prescription.js'), 'utf8');
 const parser = import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const printedLayouts = JSON.parse(fs.readFileSync(require.resolve('../../tests/fixtures/printed-prescription-layouts.json'), 'utf8'));
 
 test('OCR extracts medicines and strengths, excluding patient details and dosage instructions', async () => {
   const { parsePrescriptionMedicines } = await parser;
@@ -355,4 +356,94 @@ test('noisy composition descriptions are removed without inventing a missing com
   assert.equal(items[1].name,'BIOCID MH 3.5+');
   assert.equal(items[1].strength,'2g');
   assert.equal(items[1].needsReview,true);
+});
+
+for (const fixture of printedLayouts) test(`printed layout: ${fixture.id}`, async () => {
+  const { parsePrescriptionMedicines, medicineLabel } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines(fixture.text).map(medicineLabel),fixture.expected);
+});
+
+test('damaged slash numbering is recovered instead of displaying a second medicine with a junk prefix', async () => {
+  const { selectPrescriptionReadings, medicineLabel } = await parser;
+  const items=selectPrescriptionReadings([
+    {text:'$44 1/ Cetirizine 10mg (Cetimed 10mg)\nA 3/ Thymomodulin 80mg (Rolspain 80mg)',confidence:80},
+    {text:'1/ Cetirizine 10mg (Cetimed 10mg)\n3/ Thymomodulin 80mg (Rolspain 80mg)',confidence:94},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Cetirizine 10mg','Thymomodulin 80mg']);
+});
+
+test('cleaning stray prefixes preserves both digits of row numbers', async () => {
+  const { selectPrescriptionReadings } = await parser;
+  const items=selectPrescriptionReadings([{text:'9. Vitamin C 500mg\n10. Vitamin D3 1000IU\n$44 12/ Loratadine 10mg',confidence:94}]);
+  assert.deepEqual(items.map(item=>item.rowNumber),[9,10,12]);
+});
+
+test('a sparse reading of a printed alias stays attached to its numbered medicine', async () => {
+  const { selectPrescriptionReadings, medicineLabel } = await parser;
+  const items=selectPrescriptionReadings([
+    {text:'1/ Cetirizine 10mg (Cetimed 10mg)\n3/ Thymomodulin 80mg (Rolspain 80mg)',confidence:82},
+    {text:'Cetirizine 10mg\nCetimed 10mg\nRolspain 80mg',confidence:95},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Cetirizine 10mg','Thymomodulin 80mg']);
+});
+
+test('aliases are consolidated even when the sparse pass arrives before the full numbered row', async () => {
+  const { selectPrescriptionReadings, medicineLabel } = await parser;
+  const items=selectPrescriptionReadings([
+    {text:'Cetirizine 10mg\nCetimed 10mg\nRolspain 80mg',confidence:95},
+    {text:'1/ Cetirizine 10mg (Cetimed 10mg)\n3/ Thymomodulin 80mg (Rolspain 80mg)',confidence:82},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Cetirizine 10mg','Thymomodulin 80mg']);
+});
+
+test('an alias explicitly prescribed on a separate numbered row is not discarded', async () => {
+  const { selectPrescriptionReadings, medicineLabel } = await parser;
+  const items=selectPrescriptionReadings([
+    {text:'1/ Cetirizine 10mg (Cetimed 10mg)\n2/ Cetimed 10mg',confidence:95},
+    {text:'Cetirizine 10mg\nCetimed 10mg',confidence:94},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Cetirizine 10mg','Cetimed 10mg']);
+  const later=selectPrescriptionReadings([
+    {text:'1/ Cetirizine 10mg (Cetimed 10mg)',confidence:95},
+    {text:'Cetimed 10mg',confidence:94},
+    {text:'2/ Cetimed 10mg',confidence:94},
+  ]);
+  assert.deepEqual(later.map(medicineLabel),['Cetirizine 10mg','Cetimed 10mg']);
+});
+
+test('a medicine merged onto its section heading remains readable', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('Thuốc điều trị: 1/ Cetirizine 10mg (Cetimed 10mg)'),[{name:'Cetirizine',strength:'10mg'}]);
+});
+
+test('partial OCR boxes contained in a numbered medicine row do not create extra drugs', async () => {
+  const { selectPrescriptionReadings } = await parser;
+  const items=selectPrescriptionReadings([
+    {lines:[{text:'4/ Betamethason Dipropionate (Lotusalic 15g)',confidence:85,bbox:{x0:20,y0:400,x1:600,y1:430}}]},
+    {lines:[{text:'pionate (Lotusalic 15g)',confidence:92,bbox:{x0:350,y0:402,x1:595,y1:429}}]},
+  ]);
+  assert.equal(items.length,1);
+  assert.equal(items[0].name,'Betamethason Dipropionate (Lotusalic)');
+});
+
+test('vital signs and advice fragments are excluded even when OCR gives them false row numbers or units', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('1. Sinh hiệu: HA: 13380 mmig LV 82 lần phút T: 3640 oC CN 68.00kg\n2. CN 68.00kg\n3. Khám the\n4. hoặc liên hệ\n5. đến bệnh viện khám lại'),[]);
+});
+
+test('short OCR rule fragments need medicine evidence while drug codes and release forms survive', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('7. EE\n8. AC 25mg\n9. Metformin [SR] 500mg'),[
+    {name:'AC',strength:'25mg'},{name:'Metformin (SR)',strength:'500mg'},
+  ]);
+});
+
+test('medicine-section bounds from a full reading also exclude sparse footer fragments', async () => {
+  const { selectPrescriptionReadings, medicineLabel } = await parser;
+  const line=(text,y0,y1)=>({text,confidence:95,bbox:{x0:20,y0,x1:600,y1}});
+  const items=selectPrescriptionReadings([
+    {lines:[line('Sinh hiệu: HA 133/80 CN 68kg',100,120),line('Chỉ định dùng thuốc:',180,200),line('1. Althax [KDNT] 120mg',240,260),line('Lời dặn của bác sĩ:',500,520)]},
+    {lines:[line('CN 68.00kg',125,145),line('Althax 120mg',240,260),line('7. hé. gan',550,570),line('8. hoặc liên hệ',590,610)]},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Althax 120mg']);
 });
