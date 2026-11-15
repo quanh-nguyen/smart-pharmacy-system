@@ -54,6 +54,46 @@ let activeInvoice = null;
 const checkoutDialog = $("#checkoutDialog");
 const invoiceDialog = $("#invoiceDialog");
 const checkoutForm = $("#checkoutForm");
+const medicineSearch = $("#checkoutMedicineSearch");
+
+function normalizeProductSearch(value) {
+  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
+}
+
+function filterCheckoutProducts() {
+  const terms = normalizeProductSearch(medicineSearch.value).trim().split(/\s+/).filter(Boolean);
+  let count = 0;
+  checkout?.catalog.forEach((product, index) => {
+    const text = normalizeProductSearch(`${product.name} ${product.unit}`).replace(/\s+/g, "");
+    const matches = terms.every((term) => text.includes(term));
+    $(`#cartQuantity${index}`).closest(".checkout-product").hidden = !matches;
+    if (matches) count++;
+  });
+  medicineSearch.disabled = !checkout;
+  $("#clearCheckoutSearch").hidden = !medicineSearch.value;
+  $("#checkoutSearchEmpty").hidden = !checkout || count > 0;
+  $("#checkoutSearchStatus").textContent = !checkout ? "Chưa có danh mục sản phẩm."
+    : terms.length ? `${count} / ${checkout.catalog.length} sản phẩm · Sản phẩm đã chọn vẫn được giữ trong đơn.`
+    : `${count} sản phẩm`;
+}
+
+medicineSearch.addEventListener("input", filterCheckoutProducts);
+medicineSearch.addEventListener("keydown", (event) => {
+  // Enter searches within the catalog; it must not accidentally place an order.
+  if (event.key === "Enter") event.preventDefault();
+});
+$("#clearCheckoutSearch").addEventListener("click", () => {
+  medicineSearch.value = "";
+  filterCheckoutProducts();
+  medicineSearch.focus();
+});
+checkoutForm.addEventListener("invalid", (event) => {
+  // Reveal an invalid quantity hidden by the filter so native validation can focus it.
+  if (event.target.closest(".checkout-product[hidden]")) {
+    medicineSearch.value = "";
+    filterCheckoutProducts();
+  }
+}, true);
 
 export function openPharmacyOrder(pharmacy, customer = null) {
   checkoutForm.reset();
@@ -85,6 +125,7 @@ export function openPharmacyOrder(pharmacy, customer = null) {
   }
   updateFulfillment();
   updateSummary();
+  filterCheckoutProducts();
   checkoutDialog.showModal();
 }
 
