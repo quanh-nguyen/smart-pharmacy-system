@@ -96,6 +96,7 @@ checkoutForm.addEventListener("invalid", (event) => {
 }, true);
 
 export function openPharmacyOrder(pharmacy, customer = null) {
+  $("#checkoutFeedback").hidden = true;
   checkoutForm.reset();
   $("#checkoutError").textContent = "";
   $("#checkoutPhone").setCustomValidity("");
@@ -143,7 +144,7 @@ function updateFulfillment() {
   $("#checkoutAddressField").hidden = !delivery;
   $("#checkoutAddress").disabled = !delivery;
   $("#checkoutAddress").required = delivery;
-  $("#checkoutPaymentNote").textContent = delivery ? "Thanh toán khi nhận hàng. Phí giao hàng minh họa cố định 15.000 ₫." : "Thanh toán tại nhà thuốc khi nhận hàng.";
+  $("#checkoutPaymentNote").textContent = delivery ? "Thanh toán trực tiếp khi nhận hàng (COD). Phí giao hàng minh họa cố định 15.000 ₫." : "Thanh toán trực tiếp tại nhà thuốc khi nhận hàng.";
   updateSummary();
 }
 
@@ -229,7 +230,7 @@ checkoutForm.addEventListener("submit", (event) => {
       customerEmail: $("#checkoutEmail").value.trim().toLowerCase(),
       fulfillment: delivery ? "delivery" : "pickup", address,
       note: $("#checkoutNote").value.trim(), items, subtotal, shipping, total: subtotal + shipping,
-      status: "Chờ xử lý · Demo", paymentStatus: "Chưa thanh toán", isDemo: true,
+      status: "Chờ xác nhận · Demo", paymentStatus: "Chưa thanh toán", isDemo: true,
     };
     state.inventories[checkout.pharmacy.id] = catalog.map((product) => ({ ...product,
       stock: product.stock - (items.find((item) => item.id === product.id)?.quantity || 0),
@@ -251,21 +252,53 @@ checkoutForm.addEventListener("submit", (event) => {
 
 function invoiceMarkup(order) {
   const date = new Date(order.createdAt).toLocaleString("vi-VN");
+  const confirmed = order.isDemo && Boolean(order.confirmedAt);
   return `<article class="invoice-sheet">
-    <div class="invoice-top"><div><div class="invoice-brand">✚ Smart Pharmacy</div><h3>${order.isDemo ? "HÓA ĐƠN DEMO" : "HÓA ĐƠN ĐẶT HÀNG"}</h3><p>${escapeHtml(order.pharmacy.name)}</p><p>${escapeHtml(order.pharmacy.address)}</p></div><div><p><strong>${escapeHtml(order.id)}</strong></p><p>${escapeHtml(date)}</p><span class="invoice-status">${escapeHtml(order.paymentStatus)}</span><p>${escapeHtml(order.status)}</p></div></div>
-    <div class="invoice-customer"><div><h4>KHÁCH HÀNG</h4><p><strong>${escapeHtml(order.customer)}</strong></p><p>${escapeHtml(order.customerPhone)}</p>${order.customerEmail ? `<p>${escapeHtml(order.customerEmail)}</p>` : ""}</div><div><h4>${order.fulfillment === "delivery" ? "GIAO TẬN NƠI" : "NHẬN TẠI NHÀ THUỐC"}</h4><p>${escapeHtml(order.address)}</p><p>${order.fulfillment === "delivery" ? "Thanh toán khi nhận hàng" : "Thanh toán tại nhà thuốc"}</p></div></div>
+    <div class="invoice-top"><div><div class="invoice-brand">✚ Smart Pharmacy</div><h3>${order.isDemo ? "HÓA ĐƠN DEMO" : "HÓA ĐƠN ĐẶT HÀNG"}</h3><p>${escapeHtml(order.pharmacy.name)}</p><p>${escapeHtml(order.pharmacy.address)}</p></div><div><p><strong>${escapeHtml(order.id)}</strong></p><p>${escapeHtml(date)}</p><span class="invoice-status${confirmed ? " is-confirmed" : ""}">${escapeHtml(order.isDemo ? order.status : order.paymentStatus)}</span><p>${escapeHtml(order.isDemo ? order.paymentStatus : order.status)}</p>${confirmed ? `<p>Xác nhận lúc ${escapeHtml(new Date(order.confirmedAt).toLocaleString("vi-VN"))}</p>` : ""}</div></div>
+    <div class="invoice-customer"><div><h4>KHÁCH HÀNG</h4><p><strong>${escapeHtml(order.customer)}</strong></p><p>${escapeHtml(order.customerPhone)}</p>${order.customerEmail ? `<p>${escapeHtml(order.customerEmail)}</p>` : ""}</div><div><h4>${order.fulfillment === "delivery" ? "GIAO TẬN NƠI" : "NHẬN TẠI NHÀ THUỐC"}</h4><p>${escapeHtml(order.address)}</p><p>${order.fulfillment === "delivery" ? "Thanh toán trực tiếp khi nhận hàng (COD)" : "Thanh toán trực tiếp tại nhà thuốc"}</p></div></div>
     <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>Sản phẩm</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${order.items.map((item) => `<tr><td>${escapeHtml(item.name)}<br><small>${escapeHtml(item.unit)}</small></td><td>${item.quantity}</td><td>${money(item.price)}</td><td>${money(item.total)}</td></tr>`).join("")}</tbody></table></div>
     <div class="invoice-totals"><div><span>Tạm tính</span><strong>${money(order.subtotal)}</strong></div><div><span>Phí giao hàng</span><strong>${money(order.shipping)}</strong></div><div><span>Tổng thanh toán</span><strong>${money(order.total)}</strong></div></div>
     ${order.note ? `<p><strong>Ghi chú:</strong> ${escapeHtml(order.note)}</p>` : ""}
-    <p class="invoice-footnote">${order.isDemo ? "Hóa đơn minh họa, không phải hóa đơn thuế hay xác nhận thanh toán. Đơn chỉ lưu trên trình duyệt này, chưa gửi đến nhà thuốc." : "Bản tóm tắt đơn hàng được lưu trên hệ thống, không phải hóa đơn thuế hay xác nhận thanh toán."}</p>
+    <p class="invoice-footnote">${order.isDemo ? "Giao dịch demo chỉ lưu trên trình duyệt này, chưa gửi đến nhà thuốc và không thu tiền thật. Hóa đơn minh họa, không phải hóa đơn thuế." : "Bản tóm tắt đơn hàng được lưu trên hệ thống, không phải hóa đơn thuế hay xác nhận thanh toán."}</p>
   </article>`;
 }
 
 export function showInvoice(order) {
   activeInvoice = order;
+  $("#invoiceError").textContent = "";
+  $("#checkoutFeedback").hidden = true;
   invoiceDialog.querySelector(".tag").textContent = order.isDemo ? "ĐƠN HÀNG DEMO" : "ĐƠN HÀNG TRÊN HỆ THỐNG";
   $("#invoiceContent").innerHTML = invoiceMarkup(order);
+  $("#declineInvoice").hidden = !order.isDemo;
+  $("#invoiceActionStatus").textContent = !order.isDemo ? ""
+    : order.confirmedAt ? `Đơn hàng demo đã được xác nhận. ${order.invoicePreference === "none" ? "Bạn đã chọn không nhận hóa đơn; vẫn có thể tải hoặc in lại tại đây." : "Bạn có thể tải hoặc in lại hóa đơn."} Thanh toán trực tiếp khi nhận hàng.`
+    : "Chọn tải, in hoặc không nhận hóa đơn để xác nhận đặt hàng demo. Bạn thanh toán trực tiếp khi nhận hàng.";
   if (!invoiceDialog.open) invoiceDialog.showModal();
+}
+
+function confirmInvoiceChoice(preference) {
+  if (!activeInvoice) return false;
+  $("#invoiceError").textContent = "";
+  if (!activeInvoice.isDemo) return true;
+  try {
+    // Read the latest state so invoice actions never overwrite another order or its stock.
+    const state = readState();
+    const index = state.orders.findIndex((order) => order.id === activeInvoice.id);
+    if (index < 0) throw new Error("Không tìm thấy đơn hàng. Hãy mở lại lịch sử để kiểm tra.");
+    const order = { ...state.orders[index], status: "Đã xác nhận · Demo",
+      confirmedAt: state.orders[index].confirmedAt || new Date().toISOString(), invoicePreference: preference };
+    state.orders[index] = order;
+    // Save before showing success or exporting the confirmed invoice. Stock is unchanged.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    showInvoice(order);
+    document.dispatchEvent(new CustomEvent("pharmacy-order-updated"));
+    return true;
+  } catch (failure) {
+    $("#invoiceError").textContent = failure instanceof DOMException
+      ? "Chưa thể lưu xác nhận giao dịch. Hãy kiểm tra quyền lưu trữ hoặc dung lượng trình duyệt rồi thử lại."
+      : failure.message;
+    return false;
+  }
 }
 
 // Use server snapshots for API orders; do not write them into the local demo store.
@@ -285,10 +318,12 @@ export function showApiInvoice(order, customer = null) {
   });
 }
 
-$("#printInvoice").addEventListener("click", () => window.print());
+$("#printInvoice").addEventListener("click", () => {
+  if (confirmInvoiceChoice("print")) window.print();
+});
 $("#downloadInvoice").addEventListener("click", () => {
-  if (!activeInvoice) return;
-  const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hóa đơn ${escapeHtml(activeInvoice.id)}</title><style>body{font-family:Arial,sans-serif;max-width:760px;margin:35px auto;padding:0 20px;color:#17345f}p{line-height:1.6;font-size:14px;overflow-wrap:anywhere}.invoice-top{border-bottom:2px solid #2563c9;padding-bottom:15px}.invoice-brand{color:#2563c9;font-weight:bold}.invoice-customer{display:flex;gap:40px;margin:22px 0}.invoice-customer>div{flex:1}.invoice-status{color:#986213}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:12px 6px;text-align:right;border-bottom:1px solid #ddd}th:first-child,td:first-child{text-align:left}th{background:#edf5ff}.invoice-totals{max-width:290px;margin:24px 0 24px auto}.invoice-totals>div{display:flex;justify-content:space-between;gap:10px;margin:12px 0}.invoice-totals>div:last-child{font-size:18px;border-top:1px solid #ccc;padding-top:12px}.invoice-footnote{border-top:1px dashed #ccc;padding-top:15px;font-size:12px;color:#64748b}@media(max-width:480px){.invoice-customer{display:block}}@media print{@page{size:A4;margin:15mm}body{margin:0;padding:0}tr{break-inside:avoid}}</style></head><body>${invoiceMarkup(activeInvoice)}</body></html>`;
+  if (!confirmInvoiceChoice("download")) return;
+  const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hóa đơn ${escapeHtml(activeInvoice.id)}</title><style>body{font-family:Arial,sans-serif;max-width:760px;margin:35px auto;padding:0 20px;color:#17345f}p{line-height:1.6;font-size:14px;overflow-wrap:anywhere}.invoice-top{border-bottom:2px solid #2563c9;padding-bottom:15px}.invoice-brand{color:#2563c9;font-weight:bold}.invoice-customer{display:flex;gap:40px;margin:22px 0}.invoice-customer>div{flex:1}.invoice-status{color:#986213}.invoice-status.is-confirmed{color:#157347}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:12px 6px;text-align:right;border-bottom:1px solid #ddd}th:first-child,td:first-child{text-align:left}th{background:#edf5ff}.invoice-totals{max-width:290px;margin:24px 0 24px auto}.invoice-totals>div{display:flex;justify-content:space-between;gap:10px;margin:12px 0}.invoice-totals>div:last-child{font-size:18px;border-top:1px solid #ccc;padding-top:12px}.invoice-footnote{border-top:1px dashed #ccc;padding-top:15px;font-size:12px;color:#64748b}@media(max-width:480px){.invoice-customer{display:block}}@media print{@page{size:A4;margin:15mm}body{margin:0;padding:0}tr{break-inside:avoid}}</style></head><body>${invoiceMarkup(activeInvoice)}</body></html>`;
   const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
@@ -297,13 +332,21 @@ $("#downloadInvoice").addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
+$("#declineInvoice").addEventListener("click", () => {
+  if (!activeInvoice?.isDemo || !confirmInvoiceChoice("none")) return;
+  invoiceDialog.close();
+  $("#checkoutFeedback span").textContent = "Đơn hàng demo đã được xác nhận. Bạn đã chọn không nhận hóa đơn. Thanh toán trực tiếp khi nhận hàng; đơn vẫn được lưu trong lịch sử.";
+  $("#checkoutFeedback").hidden = false;
+});
+$("#checkoutFeedback button").addEventListener("click", () => { $("#checkoutFeedback").hidden = true; });
+
 export function openCheckoutHistory(customer = null) {
   const list = $("#checkoutHistoryList");
   try {
     const orders = getCheckoutOrders(customer?.email);
     list.innerHTML = orders.length ? orders.map((order, index) => `
       <article class="checkout-history-order"><div><span class="demo-badge">${escapeHtml(order.status)}</span><time datetime="${escapeHtml(order.createdAt)}">${escapeHtml(new Date(order.createdAt).toLocaleString("vi-VN"))}</time></div>
-        <h3>${escapeHtml(order.pharmacy.name)}</h3><p>${escapeHtml(order.items.map((item) => `${item.name} × ${item.quantity}`).join(" · "))}</p><div><strong>${money(order.total)}</strong><button class="outline-button" type="button" data-invoice-index="${index}">Xem hóa đơn</button></div></article>
+        <h3>${escapeHtml(order.pharmacy.name)}</h3><p>${escapeHtml(order.items.map((item) => `${item.name} × ${item.quantity}`).join(" · "))}</p>${order.invoicePreference === "none" ? "<p>Hóa đơn: Không nhận</p>" : ""}<div><strong>${money(order.total)}</strong><button class="outline-button" type="button" data-invoice-index="${index}">Xem hóa đơn</button></div></article>
     `).join("") : '<p class="checkout-history-empty">Chưa có đơn hàng demo. Chọn “Thử đặt hàng demo” để bắt đầu.</p>';
     list.querySelectorAll("[data-invoice-index]").forEach((button) => button.addEventListener("click", () => {
       $("#checkoutHistoryDialog").close();
