@@ -736,6 +736,40 @@ window.Tesseract = {createWorker: async () => ({
         expect(self.page.locator('#prescriptionRawText')).to_have_value('')
         expect(self.page.locator('#openPrescriptionImage')).to_be_hidden()
 
+    def test_ocr_filters_document_noise_before_display_and_stock_search(self):
+        self.seed_inventory()
+        self.ocr_confidence = 58
+        self.ocr_text = '''1. LL SỞ Y TẾ TP.HỒ CHÍ MINH SỐ hồ sơ: 70180.140717744 955
+2. PON THUOC
+1. Paracetamol 500mg
+2. Vitamin C 500mg
+78 Đường Giải Phóng, Phương Mai, Đống Đa, Hà Nội
+3. Thứ 7
+4. Chủ nhật (từ 7h30 đến 16h30)
+5. Hotline: 0901234567
+6. n¤'''
+        self.upload_prescription()
+        expect(self.page.locator('#medicineInput')).to_have_value('Paracetamol 500mg\nVitamin C 500mg')
+        expect(self.page.locator('#prescriptionMedicines li')).to_have_text(['Paracetamol 500mg','Vitamin C 500mg'])
+        expect(self.page.locator('#prescriptionMedicines .needs-review')).to_have_count(2)
+        expect(self.page.locator('#prescriptionMedicines li').first).to_have_attribute('aria-label',re.compile('cần đối chiếu ảnh'))
+        expect(self.page.locator('#prescriptionRawDetails')).not_to_have_attribute('open','')
+        self.page.locator('#prescriptionRawDetails summary').click()
+        self.assertIn('78 Đường Giải Phóng', self.page.locator('#prescriptionRawText').input_value())
+        self.page.locator('#confirmPrescriptionMedicines').check()
+        self.page.locator('#prescriptionButton').click()
+        self.completed(1)
+        expect(self.page.locator('#pharmacyList h3')).to_have_text('Nhà thuốc đủ thuốc')
+
+    def test_document_only_image_does_not_offer_noise_as_medicines(self):
+        self.ocr_text = '1. PON THUOC\n78 Đường Giải Phóng, Phương Mai, Đống Đa, Hà Nội\n2. Thứ 7\n3. Số hồ sơ: 70180140717744'
+        self.upload_prescription()
+        expect(self.page.locator('#prescriptionOcrStatus')).to_have_attribute('data-state','error')
+        expect(self.page.locator('#prescriptionMedicines li')).to_have_count(0)
+        expect(self.page.locator('#medicineInput')).to_have_value('')
+        expect(self.page.locator('#prescriptionButton')).to_be_disabled()
+        expect(self.page.locator('#prescriptionRawDetails')).to_be_visible()
+
     def test_remove_image_during_ocr_discards_late_results_and_allows_same_file(self):
         self.page.evaluate("""() => {
             window.holdPrescriptionOcr = true;
@@ -839,10 +873,10 @@ window.Tesseract = {createWorker: async () => ({
             "Paracetamol 500mg", "Loratadine 10mg", "Vitamin C 500mg"], timeout=90000)
         expect(self.page.locator("#prescriptionButton")).to_be_disabled()
 
-    def printed_ocr_sample(self, labels, difficult=False):
+    def printed_ocr_sample(self, labels, difficult=False, document_noise=False):
         self.real_ocr = True
         self.page.locator('[data-tab="prescription"]').click()
-        image = self.page.evaluate("""({labels,difficult}) => {
+        image = self.page.evaluate("""({labels,difficult,document_noise}) => {
             const paper=document.createElement('canvas');paper.width=1400;paper.height=2000;
             const ctx=paper.getContext('2d');
             const shadow=ctx.createLinearGradient(0,0,1400,0);
@@ -856,6 +890,12 @@ window.Tesseract = {createWorker: async () => ({
                 ctx.font='22px Arial';ctx.fillText('Uống theo hướng dẫn của bác sĩ',105,y+38);
                 ctx.fillText('SL: 20 viên',1120,y);
             });
+            if(document_noise){
+                ctx.font='24px Arial';ctx.fillText('SỞ Y TẾ HÀ NỘI - SỐ HỒ SƠ: 70180140717744',75,235);
+                ['78 Đường Giải Phóng, Phương Mai, Đống Đa, Hà Nội',
+                 'Thứ 2 đến thứ 6', 'Thứ 7', 'Chủ nhật (từ 7h30 đến 16h30)',
+                 'Hotline: 0901234567'].forEach((line,index)=>ctx.fillText(line,75,1450+index*55));
+            }
             ctx.font='23px Arial';ctx.fillText('Ngày 15 tháng 11 năm 2026',850,1820);
             ctx.fillText('Bác sĩ kê đơn',1000,1880);
             if(!difficult)return paper.toDataURL('image/png').split(',')[1];
@@ -863,7 +903,7 @@ window.Tesseract = {createWorker: async () => ({
             const photoCtx=photo.getContext('2d');photoCtx.fillStyle='#777777';photoCtx.fillRect(0,0,1520,2100);
             photoCtx.translate(90,20);photoCtx.rotate(2.3*Math.PI/180);photoCtx.filter='blur(0.65px)';photoCtx.drawImage(paper,0,0);
             return photo.toDataURL('image/jpeg',0.70).split(',')[1];
-        }""", {'labels':labels,'difficult':difficult})
+        }""", {'labels':labels,'difficult':difficult,'document_noise':document_noise})
         self.page.locator('#prescriptionFile').set_input_files({'name':'printed-shadow.jpg' if difficult else 'printed-list.png',
             'mimeType':'image/jpeg' if difficult else 'image/png','buffer':base64.b64decode(image)})
         self.page.wait_for_function("document.querySelector('#prescriptionOcrStatus').dataset.state !== 'reading'",timeout=90000)
@@ -882,6 +922,11 @@ window.Tesseract = {createWorker: async () => ({
     def test_real_ocr_keeps_lower_rows_with_tilt_blur_and_shadow(self):
         self.printed_ocr_sample(['Paracetamol 500mg','Loratadine 10mg','Cetirizine 10mg','Metformin 500mg',
             'Omeprazole 20mg','Amlodipine 5mg','Losartan 50mg','Vitamin C 500mg'],difficult=True)
+
+    @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
+    def test_real_ocr_filters_clinic_address_and_hours_from_a_printed_image(self):
+        self.printed_ocr_sample(['Paracetamol 500mg','Loratadine 10mg','Cetirizine 10mg','Metformin 500mg',
+            'Omeprazole 20mg','Vitamin C 500mg'],document_noise=True)
 
     @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
     def test_real_ocr_recovers_tilted_low_contrast_rows_and_flags_ambiguous_name(self):
