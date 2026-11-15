@@ -1915,7 +1915,7 @@ addListener(document.querySelector("#loadOrderDemo"), "click", () => {
   renderMapPharmacies(demoPharmacies, "demo", demoOrigin);
   document.querySelector(".results-title h2").textContent = "Chọn nhà thuốc để thử đặt hàng";
   resultNote.textContent = "3 nhà thuốc mẫu · khoảng cách mô phỏng";
-  statusText.textContent = "Đã tải dữ liệu demo. Bấm Đặt hàng → Điền mẫu → Đặt hàng demo để nhận hóa đơn.";
+  statusText.textContent = "Đã tải dữ liệu demo. Bấm Đặt hàng → Điền mẫu → Kiểm tra đơn hàng → Xác nhận đặt hàng để thử.";
   results.classList.remove("hidden");
   symptomWidget.classList.add("hidden");
   results.scrollIntoView({ behavior: "smooth", block: "start" });
