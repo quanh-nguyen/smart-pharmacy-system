@@ -97,6 +97,7 @@ class PharmacySearchTests(unittest.TestCase):
         self.ocr_text = "ĐƠN THUỐC\nHọ tên: Nguyễn Văn A\n1. Paracetamol 500mg\nUống khi sốt\n2. Vitamin C 500mg"
         self.real_ocr = False
         self.ocr_confidence = 95
+        self.ocr_readings = None
         self.api_stock = None
         self.stock_requests = []
         self.context.route("**/*", self.route)
@@ -139,12 +140,14 @@ class PharmacySearchTests(unittest.TestCase):
 window.Tesseract = {createWorker: async () => ({
   recognize: async () => {
     if (window.failPrescriptionOcr) throw new Error('Unreadable image');
-    const result = {data: {text: %s, confidence: %s}};
+    window.prescriptionOcrPasses = (window.prescriptionOcrPasses || 0) + 1;
+    const readings = %s;
+    const result = {data: readings ? readings[Math.min(window.prescriptionOcrPasses-1,readings.length-1)] : {text: %s, confidence: %s}};
     if (window.holdPrescriptionOcr) return new Promise(resolve => {window.finishPrescriptionOcr = () => resolve(result)});
     return result;
   },
   terminate: async () => { window.prescriptionWorkerTerminated = true; }
-})};""" % (json.dumps(self.ocr_text), self.ocr_confidence))
+})};""" % (json.dumps(self.ocr_readings), json.dumps(self.ocr_text), self.ocr_confidence))
             else:
                 route.fulfill(body=b"\0", headers={"Access-Control-Allow-Origin": "*"})
         elif url.startswith(self.base + "/data/pharmacies/index.json") and self.serve_real_catalog:
@@ -707,6 +710,32 @@ window.Tesseract = {createWorker: async () => ({
         self.page.locator("#medicineInput").fill("Baciamin Plus 1tỉCFU\nPROHEPATIS 100mg")
         expect(self.page.locator("#prescriptionMedicines .needs-review")).to_have_count(1)
 
+    def test_complementary_ocr_readings_retain_rows_missing_from_a_confident_first_pass(self):
+        self.ocr_readings = [
+            {'text':'1. Paracetamol 500mg\n2. Loratadine 10mg','confidence':96},
+            {'text':'2. Loratadine 10mg\n3. Vitamin C 500mg','confidence':95},
+            {'text':'1. Paracetamol 500mg\n3. Vitamin C 500mg\n4. Metformin 500mg','confidence':94},
+        ]
+        self.upload_prescription()
+        expect(self.page.locator('#medicineInput')).to_have_value('Paracetamol 500mg\nLoratadine 10mg\nVitamin C 500mg\nMetformin 500mg')
+        expect(self.page.locator('#prescriptionMedicines li')).to_have_count(4)
+        expect(self.page.locator('#prescriptionMedicines .needs-review')).to_have_count(1)
+        expect(self.page.locator('#prescriptionButton')).to_be_disabled()
+
+    def test_full_ocr_text_and_original_image_are_available_for_review_and_cleared_on_removal(self):
+        self.ocr_text = 'ĐƠN THUỐC\nHọ tên: Bệnh nhân kiểm thử\n1. Paracetamol 500mg\n3. Loratadine 10mg'
+        self.upload_prescription()
+        expect(self.page.locator('#prescriptionOcrStatus')).to_contain_text('Số thứ tự chưa liên tục')
+        expect(self.page.locator('#openPrescriptionImage')).to_have_attribute('href',re.compile(r'^blob:'))
+        self.page.locator('#prescriptionRawDetails summary').click()
+        raw=self.page.locator('#prescriptionRawText').input_value()
+        self.assertIn('Họ tên: Bệnh nhân kiểm thử',raw)
+        self.assertIn('Lần đọc 3',raw)
+        self.page.locator('#removePrescriptionImage').click()
+        expect(self.page.locator('#prescriptionRawDetails')).to_be_hidden()
+        expect(self.page.locator('#prescriptionRawText')).to_have_value('')
+        expect(self.page.locator('#openPrescriptionImage')).to_be_hidden()
+
     def test_remove_image_during_ocr_discards_late_results_and_allows_same_file(self):
         self.page.evaluate("""() => {
             window.holdPrescriptionOcr = true;
@@ -721,6 +750,7 @@ window.Tesseract = {createWorker: async () => ({
         expect(self.page.locator("#prescriptionFile")).to_have_value("")
         expect(self.page.locator("#medicineInput")).to_have_value("")
         expect(self.page.locator("#prescriptionMedicines li")).to_have_count(0)
+        expect(self.page.locator('#prescriptionRawDetails')).to_be_hidden()
         expect(self.page.locator("#prescriptionButton")).to_be_disabled()
         self.assertTrue(self.page.evaluate("window.revokedPrescriptionImage.startsWith('blob:')"))
         self.page.evaluate("window.holdPrescriptionOcr = false")
@@ -808,6 +838,50 @@ window.Tesseract = {createWorker: async () => ({
         expect(self.page.locator("#prescriptionMedicines li")).to_have_text([
             "Paracetamol 500mg", "Loratadine 10mg", "Vitamin C 500mg"], timeout=90000)
         expect(self.page.locator("#prescriptionButton")).to_be_disabled()
+
+    def printed_ocr_sample(self, labels, difficult=False):
+        self.real_ocr = True
+        self.page.locator('[data-tab="prescription"]').click()
+        image = self.page.evaluate("""({labels,difficult}) => {
+            const paper=document.createElement('canvas');paper.width=1400;paper.height=2000;
+            const ctx=paper.getContext('2d');
+            const shadow=ctx.createLinearGradient(0,0,1400,0);
+            shadow.addColorStop(0,difficult?'#a9a9a9':'white');shadow.addColorStop(1,difficult?'#eeeeee':'white');
+            ctx.fillStyle=shadow;ctx.fillRect(0,0,1400,2000);
+            ctx.fillStyle=difficult?'#555555':'#111111';ctx.font='bold 34px Arial';
+            ctx.fillText('ĐƠN THUỐC',540,90);ctx.font='24px Arial';
+            ctx.fillText('Họ tên: Bệnh nhân kiểm thử',70,145);ctx.fillText('Chẩn đoán: Kiểm thử đọc ảnh',70,190);
+            labels.forEach((label,index)=>{
+                const y=280+index*135;ctx.font='28px Arial';ctx.fillText((index+1)+'. '+label,75,y);
+                ctx.font='22px Arial';ctx.fillText('Uống theo hướng dẫn của bác sĩ',105,y+38);
+                ctx.fillText('SL: 20 viên',1120,y);
+            });
+            ctx.font='23px Arial';ctx.fillText('Ngày 15 tháng 11 năm 2026',850,1820);
+            ctx.fillText('Bác sĩ kê đơn',1000,1880);
+            if(!difficult)return paper.toDataURL('image/png').split(',')[1];
+            const photo=document.createElement('canvas');photo.width=1520;photo.height=2100;
+            const photoCtx=photo.getContext('2d');photoCtx.fillStyle='#777777';photoCtx.fillRect(0,0,1520,2100);
+            photoCtx.translate(90,20);photoCtx.rotate(2.3*Math.PI/180);photoCtx.filter='blur(0.65px)';photoCtx.drawImage(paper,0,0);
+            return photo.toDataURL('image/jpeg',0.70).split(',')[1];
+        }""", {'labels':labels,'difficult':difficult})
+        self.page.locator('#prescriptionFile').set_input_files({'name':'printed-shadow.jpg' if difficult else 'printed-list.png',
+            'mimeType':'image/jpeg' if difficult else 'image/png','buffer':base64.b64decode(image)})
+        self.page.wait_for_function("document.querySelector('#prescriptionOcrStatus').dataset.state !== 'reading'",timeout=90000)
+        actual=self.page.locator('#medicineInput').input_value()
+        self.assertEqual(self.page.locator('#prescriptionMedicines li').count(),len(labels),actual)
+        self.assertEqual([re.sub(r'\s+',' ',line).lower() for line in actual.splitlines()],[label.lower() for label in labels],actual)
+        expect(self.page.locator('#prescriptionButton')).to_be_disabled()
+        self.assertEqual(self.page.evaluate('window.locationRequests'),0)
+
+    @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
+    def test_real_ocr_keeps_all_ten_rows_of_a_clear_printed_prescription(self):
+        self.printed_ocr_sample(['Paracetamol 500mg','Loratadine 10mg','Cetirizine 10mg','Metformin 500mg',
+            'Omeprazole 20mg','Amlodipine 5mg','Losartan 50mg','Atorvastatin 10mg','Vitamin C 500mg','Vitamin D3 1000IU'])
+
+    @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
+    def test_real_ocr_keeps_lower_rows_with_tilt_blur_and_shadow(self):
+        self.printed_ocr_sample(['Paracetamol 500mg','Loratadine 10mg','Cetirizine 10mg','Metformin 500mg',
+            'Omeprazole 20mg','Amlodipine 5mg','Losartan 50mg','Vitamin C 500mg'],difficult=True)
 
     @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
     def test_real_ocr_recovers_tilted_low_contrast_rows_and_flags_ambiguous_name(self):
