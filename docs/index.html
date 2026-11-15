@@ -367,15 +367,19 @@
           </section>
         </div>
         <p id="checkoutError" class="checkout-error" role="alert"></p>
-        <div class="shop-dialog-footer"><span>Hóa đơn hiện ngay sau khi đặt. Bạn có thể mở lại trong lịch sử đơn hàng.</span><button class="primary" id="confirmCheckout" type="submit" disabled>Đặt hàng demo <span aria-hidden="true">→</span></button></div>
+        <div class="shop-dialog-footer"><span>Sau khi đặt, chọn nhận hoặc không nhận hóa đơn để xác nhận giao dịch demo.</span><button class="primary" id="confirmCheckout" type="submit" disabled>Đặt hàng demo <span aria-hidden="true">→</span></button></div>
       </form>
     </dialog>
 
     <dialog class="shop-dialog invoice-dialog" id="invoiceDialog" aria-labelledby="invoiceTitle">
       <div class="shop-dialog-heading no-print"><div><p class="tag">ĐẶT HÀNG THÀNH CÔNG</p><h2 id="invoiceTitle">Hóa đơn của bạn</h2></div><button class="dialog-close" type="button" data-close-dialog aria-label="Đóng hóa đơn">×</button></div>
       <div id="invoiceContent"></div>
-      <div class="shop-dialog-footer no-print"><button class="outline-button" id="downloadInvoice" type="button">Tải hóa đơn (.html)</button><button class="primary" id="printInvoice" type="button">In / Lưu PDF</button></div>
+      <p id="invoiceActionStatus" class="invoice-action-status no-print" role="status"></p>
+      <p id="invoiceError" class="checkout-error no-print" role="alert"></p>
+      <div class="shop-dialog-footer no-print"><button class="text-button" id="declineInvoice" type="button">Không nhận hóa đơn</button><button class="outline-button" id="downloadInvoice" type="button">Tải hóa đơn (.html)</button><button class="primary" id="printInvoice" type="button">In / Lưu PDF</button></div>
     </dialog>
+
+    <div class="checkout-feedback no-print" id="checkoutFeedback" role="status" hidden><span></span><button type="button" aria-label="Đóng thông báo">×</button></div>
 
     <dialog class="shop-dialog history-dialog" id="checkoutHistoryDialog" aria-labelledby="checkoutHistoryTitle">
       <div class="shop-dialog-heading"><div><p class="tag">ĐƠN HÀNG DEMO</p><h2 id="checkoutHistoryTitle">Đơn hàng &amp; hóa đơn</h2><p>Các đơn đã đặt trên trình duyệt này. Bạn có thể mở lại và xuất hóa đơn.</p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Đóng lịch sử đơn hàng">×</button></div>
