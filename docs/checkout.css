@@ -70,6 +70,13 @@
 .checkout-error:empty { display: none; }
 .address-hint, .address-status, .address-attribution { font-size: 11px; line-height: 1.7; color: #526781; }
 .address-status.is-verified { color: #157347; font-weight: 600; }
+.address-status.is-partial { color: #8a5a12; }
+.manual-address-confirmation { padding: 12px; border: 1px solid #ead4a8; border-radius: 9px; background: #fff8e9; }
+.manual-address-confirmation[hidden] { display: none; }
+.manual-address-confirmation p { margin: 0; color: #805b20; font-size: 12px; line-height: 1.7; }
+.manual-address-confirmation label { display: flex; align-items: flex-start; gap: 9px; line-height: 1.7; }
+.manual-address-confirmation label span { color: #805b20; }
+.manual-address-confirmation input[type="checkbox"] { flex: 0 0 18px; width: 18px; min-height: 18px; margin-top: 2px; }
 .address-error { color: #bd3434; font-size: 12px; line-height: 1.7; }
 .address-error:empty, .address-status:empty { display: none; }
 .address-results { margin: 12px 0; padding: 12px; border: 1px solid #cbd9eb; border-radius: 9px; min-width: 0; }
@@ -84,6 +91,7 @@
 .review-sheet p { color: #526781; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .review-sheet .invoice-customer { margin-top: 0; }
 .review-verified { padding: 10px 12px; border-radius: 8px; background: #e5f6ed; color: #157347 !important; }
+.review-manual { padding: 10px 12px; border-radius: 8px; background: #fff8e9; color: #805b20 !important; }
 .review-dialog .shop-dialog-footer { flex-wrap: wrap; }
 .shop-dialog-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 18px 28px; border-top: 1px solid #e2e8f0; background: #f8fafd; }
 .shop-dialog-footer > span { flex: 1; max-width: 300px; margin-right: auto; color: #64748b; font-size: 11px; line-height: 1.6; }
