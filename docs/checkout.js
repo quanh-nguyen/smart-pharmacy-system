@@ -1,3 +1,5 @@
+import { searchDeliveryAddresses } from './delivery-address.js';
+
 const STORAGE_KEY = "smartPharmacyCheckout_v1";
 const SHIPPING_FEE = 15000;
 const money = (value) => `${Number(value).toLocaleString("vi-VN")} ₫`;
@@ -51,7 +53,11 @@ export function getCheckoutOrders(email) {
 
 let checkout = null;
 let activeInvoice = null;
+let addressLookup = null;
+let addressLookupVersion = 0;
+let placingOrder = false;
 const checkoutDialog = $("#checkoutDialog");
+const reviewDialog = $("#checkoutReviewDialog");
 const invoiceDialog = $("#invoiceDialog");
 const checkoutForm = $("#checkoutForm");
 const medicineSearch = $("#checkoutMedicineSearch");
@@ -97,6 +103,7 @@ checkoutForm.addEventListener("invalid", (event) => {
 
 export function openPharmacyOrder(pharmacy, customer = null) {
   $("#checkoutFeedback").hidden = true;
+  clearAddressVerification();
   checkoutForm.reset();
   $("#checkoutError").textContent = "";
   $("#checkoutPhone").setCustomValidity("");
@@ -176,6 +183,8 @@ $("#checkoutProductList").addEventListener("click", (event) => {
   updateSummary();
 });
 $("#checkoutFulfillment").addEventListener("change", updateFulfillment);
+$("#checkoutFulfillment").addEventListener("change", clearAddressVerification);
+$("#checkoutAddress").addEventListener("input", clearAddressVerification);
 $("#checkoutPhone").addEventListener("input", () => $("#checkoutPhone").setCustomValidity(""));
 $("#fillDemoOrder").addEventListener("click", () => {
   if (!checkout) return;
@@ -183,7 +192,8 @@ $("#fillDemoOrder").addEventListener("click", () => {
   $("#checkoutPhone").value = "0901234567";
   $("#checkoutPhone").setCustomValidity("");
   $("#checkoutEmail").value ||= "khach.demo@example.com";
-  $("#checkoutAddress").value = "24 Phố Mẫu, Hoàn Kiếm, Hà Nội (địa chỉ demo)";
+  $("#checkoutAddress").value = "1 Tràng Tiền, Hà Nội";
+  clearAddressVerification();
   let remaining = 2;
   checkout.catalog.forEach((product, index) => {
     $(`#cartQuantity${index}`).value = product.stock > 0 && remaining-- > 0 ? Math.min(product.stock, index === 0 ? 2 : 1) : 0;
@@ -192,61 +202,169 @@ $("#fillDemoOrder").addEventListener("click", () => {
   updateSummary();
 });
 
-checkoutForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!checkout) return;
-  const error = $("#checkoutError");
-  error.textContent = "";
+function clearAddressVerification() {
+  addressLookupVersion++;
+  addressLookup?.abort();
+  addressLookup = null;
+  if (checkout) checkout.addressVerification = null;
+  $("#checkoutAddressStatus").textContent = "";
+  $("#checkoutAddressStatus").classList.remove("is-verified");
+  $("#checkoutAddressError").textContent = "";
+  $("#checkoutAddressResults").hidden = true;
+  $("#checkoutAddressResults > div").replaceChildren();
+  $("#verifyDeliveryAddress").disabled = false;
+  $("#verifyDeliveryAddress").textContent = "Kiểm tra địa chỉ";
+}
+
+$("#verifyDeliveryAddress").addEventListener("click", async () => {
+  if (!checkout || $("#checkoutFulfillment").value !== "delivery") return;
+  clearAddressVerification();
+  const version = addressLookupVersion;
+  const currentCheckout = checkout;
+  const query = $("#checkoutAddress").value.trim();
+  const controller = new AbortController();
+  addressLookup = controller;
+  $("#verifyDeliveryAddress").disabled = true;
+  $("#verifyDeliveryAddress").textContent = "Đang kiểm tra…";
+  $("#checkoutAddressStatus").textContent = "Đang tìm số nhà và đường trên bản đồ…";
+  try {
+    const matches = await searchDeliveryAddresses(query, { signal: controller.signal });
+    if (controller.signal.aborted || version !== addressLookupVersion || checkout !== currentCheckout) return;
+    $("#checkoutAddressStatus").textContent = "";
+    if (!matches.length) throw new Error("Không tìm thấy địa chỉ có số nhà và tên đường khớp trên bản đồ. Hãy kiểm tra lại địa chỉ hoặc chọn nhận tại nhà thuốc.");
+    const results = $("#checkoutAddressResults");
+    results.hidden = false;
+    results.querySelector('div').innerHTML = matches.map((match, index) => `<div><label><input type="radio" name="verifiedDeliveryAddress" value="${index}"><span>${escapeHtml(match.label)}</span></label><a href="https://www.openstreetmap.org/?mlat=${match.latitude}&mlon=${match.longitude}#map=18/${match.latitude}/${match.longitude}" target="_blank" rel="noopener noreferrer">Xem vị trí trên bản đồ ↗</a></div>`).join("");
+    results.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
+      const match = matches[Number(input.value)];
+      $("#checkoutAddress").value = match.label;
+      checkout.addressVerification = { ...match, input: match.label, verifiedAt: new Date().toISOString() };
+      $("#checkoutAddressStatus").textContent = "Đã chọn địa chỉ nhận hàng trên bản đồ.";
+      $("#checkoutAddressStatus").classList.add("is-verified");
+      $("#checkoutAddressError").textContent = "";
+    }));
+    $("#checkoutAddressStatus").textContent = "Tìm thấy địa chỉ. Hãy chọn đúng kết quả bên dưới.";
+  } catch (error) {
+    if (controller.signal.aborted || version !== addressLookupVersion) return;
+    $("#checkoutAddressStatus").textContent = "";
+    $("#checkoutAddressError").textContent = error.message;
+  } finally {
+    if (version === addressLookupVersion) {
+      addressLookup = null;
+      $("#verifyDeliveryAddress").disabled = false;
+      $("#verifyDeliveryAddress").textContent = "Kiểm tra địa chỉ";
+    }
+  }
+});
+checkoutDialog.addEventListener('close', () => { addressLookup?.abort(); });
+
+function orderDraft() {
   const phone = $("#checkoutPhone").value.trim();
   const digits = phone.replace(/\D/g, "");
   if (!/^\+?[\d\s().-]+$/.test(phone) || digits.length < 9 || digits.length > 15) {
     $("#checkoutPhone").setCustomValidity("Vui lòng nhập số điện thoại hợp lệ (9–15 chữ số).");
   }
-  if (!checkoutForm.reportValidity()) return;
+  if (!checkoutForm.reportValidity()) return null;
   const customer = $("#checkoutName").value.trim();
   const delivery = $("#checkoutFulfillment").value === "delivery";
   const address = delivery ? $("#checkoutAddress").value.trim() : checkout.pharmacy.address;
   if (!customer || !address) {
-    error.textContent = "Vui lòng nhập họ tên và địa chỉ nhận hàng hợp lệ.";
-    return;
+    throw new Error("Vui lòng nhập họ tên và địa chỉ nhận hàng hợp lệ.");
   }
-  $("#confirmCheckout").disabled = true;
+  if (delivery && (!checkout.addressVerification || checkout.addressVerification.input !== address)) {
+    $("#checkoutAddressError").textContent = "Vui lòng kiểm tra và chọn địa chỉ giao hàng trên bản đồ trước khi tiếp tục.";
+    $("#verifyDeliveryAddress").focus();
+    return null;
+  }
+  const items = selectedItems();
+  if (!items.length) throw new Error("Hãy chọn ít nhất một sản phẩm.");
+  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const shipping = delivery ? SHIPPING_FEE : 0;
+  return { pharmacy: checkout.pharmacy, customer, customerPhone: phone,
+    customerEmail: $("#checkoutEmail").value.trim().toLowerCase(), fulfillment: delivery ? "delivery" : "pickup", address,
+    deliveryLocation: delivery ? { ...checkout.addressVerification } : null,
+    note: $("#checkoutNote").value.trim(), items, subtotal, shipping, total: subtotal + shipping };
+}
+
+function checkStock(state, draft) {
+  const catalog = catalogFor(state, draft.pharmacy);
+  for (const item of draft.items) {
+    const product = catalog.find(entry => entry.id === item.id);
+    if (!product || item.quantity > product.stock) throw new Error(`${item.name} không đủ tồn kho. Hãy đóng và mở lại cửa sổ để cập nhật số lượng.`);
+    if (item.price !== product.price) throw new Error("Đơn giá đã thay đổi. Hãy đóng và mở lại cửa sổ để cập nhật.");
+  }
+  return catalog;
+}
+
+function reviewMarkup(draft) {
+  return `<article class="review-sheet"><h3>${escapeHtml(draft.pharmacy.name)}</h3>
+    <div class="invoice-customer"><div><h4>NGƯỜI NHẬN</h4><p>${escapeHtml(draft.customer)}</p><p>${escapeHtml(draft.customerPhone)}</p>${draft.customerEmail ? `<p>${escapeHtml(draft.customerEmail)}</p>` : ""}</div>
+    <div><h4>${draft.fulfillment === 'delivery' ? 'GIAO TẬN NƠI' : 'NHẬN TẠI NHÀ THUỐC'}</h4><p>${escapeHtml(draft.address)}</p>${draft.deliveryLocation ? '<p class="review-verified">✓ Đã chọn địa chỉ trên bản đồ</p>' : ''}<p>Thanh toán trực tiếp ${draft.fulfillment === 'delivery' ? 'khi nhận hàng (COD)' : 'tại nhà thuốc'}</p></div></div>
+    <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>Thuốc / sản phẩm</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${draft.items.map(item => `<tr><td>${escapeHtml(item.name)}<br><small>${escapeHtml(item.unit)}</small></td><td>${item.quantity}</td><td>${money(item.price)}</td><td>${money(item.total)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="invoice-totals"><div><span>Tạm tính</span><strong>${money(draft.subtotal)}</strong></div><div><span>Phí giao hàng</span><strong>${money(draft.shipping)}</strong></div><div><span>Tổng thanh toán</span><strong>${money(draft.total)}</strong></div></div>
+    ${draft.note ? `<p><strong>Ghi chú:</strong> ${escapeHtml(draft.note)}</p>` : ''}</article>`;
+}
+
+checkoutForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!checkout) return;
+  $("#checkoutError").textContent = "";
   try {
-    // Re-read before confirming: another checkout may have changed the available stock.
+    const draft = orderDraft();
+    if (!draft) return;
+    checkStock(readState(), draft);
+    checkout.review = draft;
+    $("#checkoutReviewError").textContent = "";
+    $("#placeReviewedOrder").disabled = false;
+    $("#checkoutReviewContent").innerHTML = reviewMarkup(draft);
+    checkoutDialog.close();
+    reviewDialog.showModal();
+  } catch (error) {
+    $("#checkoutError").textContent = error.message;
+  }
+});
+
+$("#backToCheckout").addEventListener('click', () => reviewDialog.close());
+reviewDialog.addEventListener('close', () => {
+  if (checkout?.review && !placingOrder) {
+    checkout.review = null;
+    checkoutDialog.showModal();
+    medicineSearch.focus();
+  }
+});
+reviewDialog.addEventListener('cancel', event => { if (placingOrder) event.preventDefault(); });
+
+$("#placeReviewedOrder").addEventListener('click', () => {
+  if (!checkout?.review || placingOrder) return;
+  placingOrder = true;
+  $("#placeReviewedOrder").disabled = true;
+  $("#checkoutReviewError").textContent = "";
+  try {
     const state = readState();
-    const catalog = catalogFor(state, checkout.pharmacy);
-    const items = selectedItems();
-    if (!items.length) throw new Error("Hãy chọn ít nhất một sản phẩm.");
-    for (const item of items) {
-      const product = catalog.find((entry) => entry.id === item.id);
-      if (!product || item.quantity > product.stock) throw new Error(`${item.name} không đủ tồn kho. Hãy đóng và mở lại cửa sổ để cập nhật số lượng.`);
-      if (item.price !== product.price) throw new Error("Đơn giá đã thay đổi. Hãy đóng và mở lại cửa sổ để cập nhật.");
-    }
-    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-    const shipping = delivery ? SHIPPING_FEE : 0;
+    const draft = checkout.review;
+    const catalog = checkStock(state, draft);
+    const now = new Date().toISOString();
     const order = {
-      id: `DH-${crypto.randomUUID().toUpperCase()}`, createdAt: new Date().toISOString(),
-      pharmacy: checkout.pharmacy, customer, customerPhone: phone,
-      customerEmail: $("#checkoutEmail").value.trim().toLowerCase(),
-      fulfillment: delivery ? "delivery" : "pickup", address,
-      note: $("#checkoutNote").value.trim(), items, subtotal, shipping, total: subtotal + shipping,
-      status: "Chờ xác nhận · Demo", paymentStatus: "Chưa thanh toán", isDemo: true,
+      ...draft, id: `DH-${crypto.randomUUID().toUpperCase()}`, createdAt: now, confirmedAt: now,
+      status: "Đã xác nhận · Demo", paymentStatus: "Chưa thanh toán", isDemo: true,
     };
     state.inventories[checkout.pharmacy.id] = catalog.map((product) => ({ ...product,
-      stock: product.stock - (items.find((item) => item.id === product.id)?.quantity || 0),
+      stock: product.stock - (draft.items.find((item) => item.id === product.id)?.quantity || 0),
     }));
     state.orders.unshift(order);
     // A single write persists the order, invoice snapshot and stock together.
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     checkout = null;
-    checkoutDialog.close();
+    reviewDialog.close();
     showInvoice(order);
     document.dispatchEvent(new CustomEvent("pharmacy-order-created"));
   } catch (failure) {
-    error.textContent = failure instanceof DOMException
+    $("#checkoutReviewError").textContent = failure instanceof DOMException
       ? "Không thể lưu đơn hàng. Hãy kiểm tra quyền lưu trữ hoặc dung lượng trình duyệt. Đơn chưa được tạo."
       : failure.message;
-    updateSummary();
+  } finally {
+    placingOrder = false;
+    $("#placeReviewedOrder").disabled = false;
   }
 });
 
@@ -295,7 +413,7 @@ function confirmInvoiceChoice(preference) {
     return true;
   } catch (failure) {
     $("#invoiceError").textContent = failure instanceof DOMException
-      ? "Chưa thể lưu xác nhận giao dịch. Hãy kiểm tra quyền lưu trữ hoặc dung lượng trình duyệt rồi thử lại."
+      ? "Chưa thể lưu lựa chọn hóa đơn. Đơn hàng hiện có được giữ nguyên; hãy kiểm tra quyền lưu trữ hoặc dung lượng trình duyệt rồi thử lại."
       : failure.message;
     return false;
   }
