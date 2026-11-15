@@ -66,6 +66,8 @@ class CheckoutTests(unittest.TestCase):
             elif route.request.url.startswith("https://nominatim.openstreetmap.org/search"):
                 query = parse_qs(urlsplit(route.request.url).query).get('q', [''])[0]
                 route.fulfill(json=[DELIVERY_ADDRESS] if query in {DELIVERY_QUERY, DELIVERY_ADDRESS['display_name']} else [])
+            elif route.request.url.startswith("https://nominatim.openstreetmap.org/reverse"):
+                route.fulfill(json=DELIVERY_ADDRESS)
             else:
                 route.abort()
         self.context.route("**/*", local_request)
@@ -90,9 +92,10 @@ class CheckoutTests(unittest.TestCase):
 
     def verify_delivery_address(self, page=None):
         page = page or self.page
-        page.locator('#verifyDeliveryAddress').click()
-        page.locator('#checkoutAddressResults input').first.check()
-        expect(page.locator('#checkoutAddressStatus')).to_contain_text('Đã chọn địa chỉ')
+        page.locator('#confirmCheckout').click()
+        expect(page.locator('#checkoutReviewDialog')).to_be_visible()
+        page.locator('#backToCheckout').click()
+        expect(page.locator('#checkoutAddressStatus')).to_contain_text('Đã kiểm tra địa chỉ')
 
     def place_order(self, page=None):
         page = page or self.page
@@ -139,23 +142,17 @@ class CheckoutTests(unittest.TestCase):
             expect(self.page.locator('#cartQuantity1')).to_have_value('1')
             self.assertIsNone(self.state())
 
-    def test_delivery_address_must_be_found_and_explicitly_selected(self):
+    def test_delivery_address_is_automatically_checked_before_review(self):
         self.demo_checkout()
         self.page.locator('#checkoutFulfillment').select_option('delivery')
         self.page.locator('#checkoutAddress').fill('99999 Đường Không Có Thật, Hà Nội')
-        self.page.locator('#verifyDeliveryAddress').click()
+        self.page.locator('#confirmCheckout').click()
         expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
         self.page.locator('#confirmCheckout').click()
         expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
         expect(self.page.locator('#invoiceDialog')).not_to_be_visible()
         self.assertIsNone(self.state())
         self.page.locator('#checkoutAddress').fill(DELIVERY_QUERY)
-        self.page.locator('#verifyDeliveryAddress').click()
-        expect(self.page.locator('#checkoutAddressResults input')).to_have_count(1)
-        self.page.locator('#confirmCheckout').click()
-        expect(self.page.locator('#checkoutAddressError')).to_contain_text('chọn địa chỉ')
-        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
-        self.page.locator('#checkoutAddressResults input').check()
         self.page.locator('#confirmCheckout').click()
         expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
         expect(self.page.locator('#checkoutReviewContent')).to_contain_text(DELIVERY_ADDRESS['display_name'])
@@ -186,7 +183,7 @@ class CheckoutTests(unittest.TestCase):
                 query = f'1 Tràng Tiền, Hà Nội, khu {index}'
                 pending_response[:] = [{**result, 'display_name': result['display_name'] + f', khu {index}'}]
                 self.page.locator('#checkoutAddress').fill(query)
-                self.page.locator('#verifyDeliveryAddress').click()
+                self.page.locator('#confirmCheckout').click()
                 expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
                 expect(self.page.locator('#checkoutAddressResults')).not_to_be_visible()
                 self.assertIsNone(self.state())
@@ -197,11 +194,11 @@ class CheckoutTests(unittest.TestCase):
         self.verify_delivery_address()
         self.page.locator('#confirmCheckout').click()
         self.page.locator('#backToCheckout').click()
-        expect(self.page.locator('#checkoutAddressStatus')).to_contain_text('Đã chọn địa chỉ')
+        expect(self.page.locator('#checkoutAddressStatus')).to_contain_text('Đã kiểm tra địa chỉ')
         self.page.locator('#checkoutAddress').fill('1 Đường Không Có Thật, Hà Nội')
         expect(self.page.locator('#checkoutAddressResults')).not_to_be_visible()
         self.page.locator('#confirmCheckout').click()
-        expect(self.page.locator('#checkoutAddressError')).to_contain_text('kiểm tra và chọn')
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
         expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
         self.assertIsNone(self.state())
         self.page.locator('#checkoutFulfillment').select_option('pickup')
@@ -213,10 +210,9 @@ class CheckoutTests(unittest.TestCase):
         self.demo_checkout()
         self.page.locator('#checkoutFulfillment').select_option('delivery')
         self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: route.fulfill(status=503, json={}))
-        self.page.locator('#verifyDeliveryAddress').click()
-        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Chưa kết nối được')
-        expect(self.page.locator('#verifyDeliveryAddress')).to_be_enabled()
         self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Chưa kết nối được')
+        expect(self.page.locator('#confirmCheckout')).to_be_enabled()
         expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
         self.assertIsNone(self.state())
         self.page.unroute('https://nominatim.openstreetmap.org/search**')
@@ -230,15 +226,131 @@ class CheckoutTests(unittest.TestCase):
         pending = []
         self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: pending.append(route))
         with self.page.expect_request('https://nominatim.openstreetmap.org/search**'):
-            self.page.locator('#verifyDeliveryAddress').click()
+            self.page.locator('#confirmCheckout').click()
         self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(resolve))')
         self.assertTrue(pending)
         self.page.locator('#checkoutAddress').fill('888 Địa Chỉ Khác, Hà Nội')
         pending[0].fulfill(json=[DELIVERY_ADDRESS])
         expect(self.page.locator('#checkoutAddressStatus')).to_be_empty()
         expect(self.page.locator('#checkoutAddressResults')).not_to_be_visible()
+        expect(self.page.locator('#checkoutAddress')).to_have_value('888 Địa Chỉ Khác, Hà Nội')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+
+    def test_ambiguous_address_requires_selection_before_review(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        alternative = {**DELIVERY_ADDRESS, 'lat': '21.025', 'osm_id': 1002,
+                       'display_name': '1, Tràng Tiền, khu B, Hà Nội, Việt Nam'}
+        self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: route.fulfill(json=[DELIVERY_ADDRESS, alternative]))
         self.page.locator('#confirmCheckout').click()
-        expect(self.page.locator('#checkoutAddressError')).to_contain_text('kiểm tra và chọn')
+        expect(self.page.locator('#checkoutAddressResults input')).to_have_count(2)
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Có nhiều kết quả')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+        self.page.locator('#checkoutAddressResults input').nth(1).check()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text(alternative['display_name'])
+        self.page.locator('#placeReviewedOrder').click()
+        self.assertEqual(self.state()['orders'][0]['deliveryLocation']['osmId'], '1002')
+
+    def test_a_street_query_cannot_auto_select_a_house_number(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.locator('#checkoutAddress').fill('Tràng Tiền, Hà Nội')
+        self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: route.fulfill(json=[DELIVERY_ADDRESS]))
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
+        expect(self.page.locator('#checkoutAddress')).to_have_value('Tràng Tiền, Hà Nội')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+
+    def test_repeated_review_clicks_share_one_address_lookup(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        pending = []
+        self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: pending.append(route))
+        with self.page.expect_request('https://nominatim.openstreetmap.org/search**'):
+            self.page.evaluate("() => {const form=document.querySelector('#checkoutForm'); form.requestSubmit(); form.requestSubmit();}")
+        self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(resolve))')
+        self.assertEqual(len(pending), 1)
+        expect(self.page.locator('#confirmCheckout')).to_be_disabled()
+        pending[0].fulfill(json=[DELIVERY_ADDRESS])
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        self.assertIsNone(self.state())
+
+    def test_current_location_fills_address_then_review_verifies_it_automatically(self):
+        self.context.set_geolocation({'latitude': 21.024, 'longitude': 105.857})
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        with self.page.expect_request('https://nominatim.openstreetmap.org/reverse**') as request:
+            self.page.locator('#useCurrentDeliveryLocation').click()
+        coordinates = parse_qs(urlsplit(request.value.url).query)
+        self.assertEqual(float(coordinates['lat'][0]), 21.024)
+        self.assertEqual(float(coordinates['lon'][0]), 105.857)
+        expect(self.page.locator('#checkoutAddress')).to_have_value(DELIVERY_ADDRESS['display_name'])
+        expect(self.page.locator('#checkoutAddressStatus')).to_contain_text('Đã điền địa chỉ gần vị trí hiện tại')
+        self.assertIsNone(self.state())
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text(DELIVERY_ADDRESS['display_name'])
+        self.page.locator('#placeReviewedOrder').click()
+        self.assertEqual(self.state()['orders'][0]['address'], DELIVERY_ADDRESS['display_name'])
+        self.assertEqual(self.state()['orders'][0]['paymentStatus'], 'Chưa thanh toán')
+
+    def test_geolocation_errors_keep_the_cart_and_manual_address(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        original_address = self.page.locator('#checkoutAddress').input_value()
+        for code, message in [(1, 'chưa cho phép'), (2, 'Không xác định được'), (3, 'quá lâu')]:
+            with self.subTest(code=code):
+                self.page.evaluate("code => {navigator.geolocation.getCurrentPosition=(success,error)=>error({code});}", code)
+                self.page.locator('#useCurrentDeliveryLocation').click()
+                expect(self.page.locator('#checkoutAddressError')).to_contain_text(message)
+                expect(self.page.locator('#checkoutAddress')).to_have_value(original_address)
+                expect(self.page.locator('#cartQuantity0')).to_have_value('2')
+                expect(self.page.locator('#useCurrentDeliveryLocation')).to_be_enabled()
+                expect(self.page.locator('#confirmCheckout')).to_be_enabled()
+                self.assertIsNone(self.state())
+        self.place_order()
+
+    def test_reverse_lookup_failure_still_allows_manual_address_review(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.route('https://nominatim.openstreetmap.org/reverse**', lambda route: route.fulfill(status=503, json={}))
+        self.page.locator('#useCurrentDeliveryLocation').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Chưa kết nối được')
+        expect(self.page.locator('#checkoutAddress')).to_have_value(DELIVERY_QUERY)
+        self.place_order()
+
+    def test_editing_address_ignores_a_late_current_location_result(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        pending = []
+        self.page.route('https://nominatim.openstreetmap.org/reverse**', lambda route: pending.append(route))
+        with self.page.expect_request('https://nominatim.openstreetmap.org/reverse**'):
+            self.page.locator('#useCurrentDeliveryLocation').click()
+        self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(resolve))')
+        self.assertTrue(pending)
+        self.page.locator('#checkoutAddress').fill('Địa chỉ tôi vừa sửa')
+        pending[0].fulfill(json=DELIVERY_ADDRESS)
+        expect(self.page.locator('#checkoutAddress')).to_have_value('Địa chỉ tôi vừa sửa')
+        expect(self.page.locator('#checkoutAddressStatus')).to_be_empty()
+        expect(self.page.locator('#useCurrentDeliveryLocation')).to_be_enabled()
+        self.assertIsNone(self.state())
+
+    def test_current_location_without_house_number_is_not_a_verified_address(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.route('https://nominatim.openstreetmap.org/reverse**', lambda route: route.fulfill(json={
+            **DELIVERY_ADDRESS, 'display_name': 'Hà Nội, Việt Nam', 'address': {'city': 'Hà Nội', 'country_code': 'vn'},
+        }))
+        self.page.locator('#useCurrentDeliveryLocation').click()
+        expect(self.page.locator('#checkoutAddressStatus')).to_contain_text('bổ sung số nhà')
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('số nhà')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
         self.assertIsNone(self.state())
 
     def test_stock_is_rechecked_after_the_customer_has_opened_review(self):
