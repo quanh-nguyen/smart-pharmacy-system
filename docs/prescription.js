@@ -11,9 +11,12 @@ const NUMBER = "\\d+(?:[.,]\\d+)?";
 const UNIT = "(?:mcg|[µμ]g|mg|kg|g|ml|iu|ui|cfu|ufc|%)";
 const SCALE = "(?:(?:tỉ|tỷ|ti|ty|triệu|trieu|nghìn|nghin|million|billion)\\s*)?";
 const STRENGTH = new RegExp(`${NUMBER}\\s*${SCALE}${UNIT}(?:\\s*[+/]\\s*(?:${NUMBER}\\s*)?${SCALE}${UNIT})*(?!\\p{L})`, "iu");
-const NUMBERING = /^[\s'"‘’“”]*\(?\s*(\d{1,2})(?:\s*[.,)/:-]\s*|\s+(?=\p{L}))/u;
-const INSTRUCTION = /^(?:ngay\b|uong\b|sang\b|trua\b|chieu\b|toi\b|cach dung\b|lieu dung\b|sau an\b|truoc an\b|sau bua\b|truoc bua\b|moi\b|boi\b|nho\b|tiem\b|xit\b|sl\b|so luong\b)/;
-const HEADER = /^(?:don thuoc|ho ten|benh nhan|tuoi|dia chi|chan doan|bac si|bs\b|ngay ke|loi dan|tai kham|phong kham|benh vien|luu y|tong cong|thanh tien|so ngay|so dien thoai|hoat chat|thanh phan|ham luong|ten thuoc|stt\b)/;
+const NUMBERING = /^[\s'"‘’“”]*\(?\s*(\d{1,2})(?:\s*[.,)/:]\s*|\s*-\s+|\s+(?=\p{L}))/u;
+const INSTRUCTION = /^(?:ngay\b|uong\b|sang\b|trua\b|chieu\b|toi\b|cach dung\b|lieu dung\b|sau an\b|truoc an\b|sau bua\b|truoc bua\b|moi\b|boi\b|nho\b|ngam\b|nhai\b|tiem\b|xit\b|sl\b|so luong\b)/;
+const HEADER = /^(?:[dp]on\s*thuoc|toa thuoc|ho(?: va)? ten|benh nhan|nguoi benh|tuoi|dia chi|chan doan|bac si|bs\b|ngay ke|loi dan|tai kham|phong kham|benh vien|trung tam y te|luu y|tong cong|thanh tien|so ngay|so dien thoai|hoat chat|thanh phan|ham luong|ten thuoc|stt\b)/;
+const DOCUMENT_LABEL = /\b(?:(?:bo|so) y te|so ho so|ma (?:ho so|benh nhan|don thuoc)|so (?:the|bhyt|bhxh)|dien thoai|hotline|email|website|fax)\b|^(?:gioi tinh|nam sinh|can nang|chieu cao|huyet ap)(?:\s*[:=]|\s+\d)/;
+const ADDRESS = /^(?:(?:no\.?|so)\s*)?(?:\d+[\d/.-]*\s+)?(?:(?:duong|pho|ngo|ngach|hem|thon|ap|phuong|quan|huyen|thi tran|thi xa|thanh pho|tinh|khu pho|khu do thi|to dan pho|dia diem|co so|chi nhanh)\b|(?:d|p|q|h|tp|ng)\.\s*\p{L}|d\/?c\s*[:.])/u;
+const SCHEDULE = /^(?:(?:tu|den)\s+)?(?:thu\s*[2-7]\b|chu nhat\b|gio (?:kham|lam viec|mo cua)\b|lich (?:kham|lam viec)\b)/;
 const QUANTITY = /^(?:\d+(?:[.,]\d+)?\s*)?(?:vien|vi|hop|goi|ong|chai|lo|tuyp|mg|mcg|ml|iu|ui)\b/;
 // Product classification is not part of the medicine name. Do not strip release forms such as (SR).
 const CLASSIFICATION = /\(\s*(?:NT|TPCN|TPBVSK|thực\s*phẩm\s*(?:chức\s*năng|bảo\s*vệ\s*sức\s*khỏe))\s*\)/iu;
@@ -30,6 +33,47 @@ function rowMarker(value) {
   // A wrapped value such as "1 tỉ CFU" is not row number 1.
   if (strength && /^[\s(]*$/.test(text.slice(0, strength.index))) return null;
   return text.match(NUMBERING);
+}
+
+function isDocumentLine(value) {
+  const text = String(value || '').trim();
+  const marker = rowMarker(text);
+  const body = normalizeMedicine(marker ? text.slice(marker[0].length) : text);
+  return HEADER.test(body) || INSTRUCTION.test(body) || DOCUMENT_LABEL.test(body) || (ADDRESS.test(body) && !STRENGTH.test(body))
+    || SCHEDULE.test(body) || /\b\d{1,2}[:h]\d{2}\b/.test(body)
+    || /https?:\/\/|www\.|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(body);
+}
+
+function cleanOcrLine(text) {
+  // Recover a row after a short stray column fragment, e.g. "đề \\2. SUCRATE".
+  // Document fields are rejected before this step so a patient/code prefix is never erased.
+  return String(text || '').trim()
+    .replace(/^[^\n]{0,12}[\\|]\s*(?=\(?\d{1,2}[.)]\s*\p{L})/u, '')
+    .replace(/^[^\p{L}\p{N}(]+(?=\d{1,2}[.)]\s*\p{L})/u, '');
+}
+
+function cleanOcrName(name) {
+  let result = name.replace(/\(\s*(?:dưới\s*dạng|duoi\s*dang|dạng\s*bào\s*chế|dang\s*bao\s*che)(?=\s|:)[^()]*(?:\)|$)/giu, '')
+    .replace(/\s*\(\s*/g, ' (').replace(/\s+\)/g, ')').replace(/\)\s*(?=[\p{L}(])/gu, ') ')
+    .replace(/\s+/g, ' ').trim();
+  const opens = (result.match(/\(/g) || []).length, closes = (result.match(/\)/g) || []).length;
+  // The strength may be inside a parenthesis; parseMedicine cuts just before it.
+  if (opens > closes && opens <= 4) result += ')'.repeat(opens-closes);
+  return result;
+}
+
+function readableMedicineName(name, wordConfidences) {
+  const words = name.match(/\p{L}+/gu) || [];
+  const shortCode = /^(?:[A-Z][A-Z\d-]{1,7}|\d{1,2}-[A-Z]{2,5})$/.test(name);
+  if ((!words.some(word => word.length >= 3) && !shortCode) || /^[\d.,\s]+\s+\p{L}/u.test(name)
+    || /[=!?<>\[\]{}|\\¤]/u.test(name) || /^(?:[.\s]*(?:mg|mcg|ml|iu|ui)\b)/i.test(name)) return false;
+  let depth = 0;
+  for (const char of name) {
+    if (char === '(') depth++;
+    if (char === ')' && --depth < 0) return false;
+  }
+  // Very weak name fragments are left in the collapsed original text for review.
+  return !(wordConfidences.length >= 2 && wordConfidences.filter(value => value < 30).length > wordConfidences.length/2);
 }
 
 export function parseMedicine(value) {
@@ -76,7 +120,7 @@ function sourceLines(data) {
 function prescriptionCandidates(data) {
   const source = sourceLines(data).flatMap(line => {
     const parts = String(line.text || '').split(/\s+(?=[‘’'"“”]*\(?\d{1,2}\s*[.)]\s+\p{L})/u).filter(text => text.trim());
-    return parts.map(text => ({...line, text, sharedBounds: parts.length > 1}));
+    return parts.filter(text => !isDocumentLine(text)).map(text => ({...line, text: cleanOcrLine(text), sharedBounds: parts.length > 1}));
   });
   const lines = [];
   for (const line of source) {
@@ -96,10 +140,11 @@ function prescriptionCandidates(data) {
     const rawText = String(line.text || "").trim();
     const marker = rowMarker(rawText);
     const normalized = normalizeMedicine(marker ? rawText.slice(marker[0].length) : rawText);
-    if (HEADER.test(normalized) || INSTRUCTION.test(normalized) || QUANTITY.test(normalized) ||
+    if (isDocumentLine(rawText) || QUANTITY.test(normalized) ||
       (!marker && /^\s*\(/.test(rawText)) ||
       (!marker && !STRENGTH.test(rawText) && !CLASSIFICATION.test(rawText))) return [];
     const item = parseMedicine(rawText);
+    item.name = cleanOcrName(item.name);
     if (!uniqueMedicines([item]).length) return [];
     const lineConfidence = Number.isFinite(line.confidence) ? line.confidence
       : Number.isFinite(data.confidence) ? data.confidence : null;
@@ -109,10 +154,12 @@ function prescriptionCandidates(data) {
       const text = normalizeMedicine(word.text).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
       return text.length > 0 && nameWords.has(text) && Number.isFinite(word.confidence);
     }).map(word => word.confidence);
+    if (!readableMedicineName(item.name, wordConfidences)) return [];
     const confidence = wordConfidences.length ? Math.min(lineConfidence ?? 100, ...wordConfidences) : lineConfidence;
     const unparsedTail = (rawText.split(CLASSIFICATION)[1] || "").replace(CLASSIFICATION, "")
       .replace(/\s*(?:[x×]\s*\d|SL\s*[:.]?|=\s*\d).*$/iu, "").trim();
     const suspicious = /[^\p{L}\p{N}\s().+/'’\-–]/u.test(item.name) ||
+      /\d+(?:[.,]\d+)?\s*[+/]\s*$/.test(item.name) ||
       (!marker && CLASSIFICATION.test(rawText)) ||
       (!item.strength && CLASSIFICATION.test(rawText) && /[\p{L}\p{N}]/u.test(unparsedTail));
     return [{ ...item, rawText, confidence, suspicious, bbox: lineBounds(line), sharedBounds: line.sharedBounds, index,
@@ -135,6 +182,29 @@ function candidateScore(item) {
   return (item.confidence ?? 50) - (item.suspicious ? 25 : 0) + (item.number != null ? 4 : 0);
 }
 
+function normalizedMedicineName(value) {
+  return normalizeMedicine(value).replace(/[()]/g, ' ').replace(/\s*([/,+-])\s*/g, '$1').replace(/\s+/g, ' ').trim();
+}
+
+function medicineKey(item) {
+  return `${normalizedMedicineName(item.name)}\n${normalizeStrength(item.strength)}`;
+}
+
+function sameMedicineFamily(a, b) {
+  if (a.number != null && b.number != null && a.number !== b.number) return false;
+  if (separateRows(a, b)) return false;
+  const core = item => normalizeMedicine(item.name.split('(')[0]);
+  if (core(a).length < 4 || core(a) !== core(b) || normalizeStrength(a.strength) !== normalizeStrength(b.strength)) return false;
+  const release = item => (normalizeMedicine(item.name).match(/\b(?:sr|xr|mr|cr|er|dr|retard)\b/g) || []).sort().join(' ');
+  if (release(a) !== release(b)) return false;
+  const notes = item => new Set(normalizeMedicine(item.name.slice(item.name.indexOf('(') + 1))
+    .replace(/\b(?:capsules?|tablets?|caplets?|vien|nang)\b/g, '')
+    .match(/[\p{L}\p{N}]+/gu) || []);
+  if (!a.name.includes('(') || !b.name.includes('(')) return true;
+  const left = notes(a), right = notes(b);
+  return left.size === right.size && [...left].every(word => right.has(word));
+}
+
 function separateRows(a, b) {
   if (!a.bbox || !b.bbox) return false;
   const height = Math.max(a.bbox.y1-a.bbox.y0, b.bbox.y1-b.bbox.y0, 1);
@@ -155,10 +225,11 @@ export function selectPrescriptionReadings(readings) {
   const passes = readings.map(prescriptionCandidates);
   const groups = [];
   passes.forEach((items, pass) => items.forEach(item => {
-    const label = normalizeMedicine(medicineLabel(item));
+    const label = medicineKey(item);
     let group = groups.find(rows => item.number != null && rows.some(other => other.number === item.number && !separateRows(item, other)));
-    group ||= groups.find(rows => rows.some(other => normalizeMedicine(medicineLabel(other)) === label));
+    group ||= groups.find(rows => rows.some(other => medicineKey(other) === label));
     group ||= groups.find(rows => !rows.some(other => other.pass === pass) && rows.some(other => samePrintedRow(item, other)));
+    group ||= groups.find(rows => !rows.some(other => other.pass === pass) && rows.some(other => sameMedicineFamily(item, other)));
     if (group) group.push({...item, pass});
     else groups.push([{...item, pass}]);
   }));
@@ -169,24 +240,24 @@ export function selectPrescriptionReadings(readings) {
   const selectedGroups = groups.map(alternatives => {
     const support = new Map();
     for (const item of alternatives) {
-      const key = normalizeMedicine(medicineLabel(item));
+      const key = medicineKey(item);
       if (!support.has(key)) support.set(key, new Set());
       support.get(key).add(item.pass);
     }
-    const score = item => candidateScore(item) + (support.get(normalizeMedicine(medicineLabel(item))).size-1)*8;
+    const score = item => candidateScore(item) + (support.get(medicineKey(item)).size-1)*8;
     let selected = alternatives.reduce((best, other) => score(other) > score(best) ? other : best, alternatives[0]);
     // Prefer a readable continuation over a truncated brand name, without guessing spelling.
     const moreComplete = alternatives.filter(other => {
       const sameName = normalizeMedicine(other.name) === normalizeMedicine(selected.name);
-      const longerName = normalizeMedicine(other.name).startsWith(normalizeMedicine(selected.name)+' ');
+      const longerName = normalizeMedicine(other.name.split('(')[0]).startsWith(normalizeMedicine(selected.name.split('(')[0])+' ');
       const keepsStrength = !selected.strength || normalizeStrength(other.strength) === normalizeStrength(selected.strength);
       return (sameName || longerName) && keepsStrength && (longerName || (!selected.strength && other.strength))
         && candidateScore(other) >= candidateScore(selected)-10;
     }).sort((a,b) => Number(Boolean(b.strength))-Number(Boolean(a.strength)) || b.name.length-a.name.length);
     if (moreComplete.length) selected = moreComplete[0];
     const rowNumbers = [...new Set(alternatives.map(item => item.number).filter(number => number != null))];
-    const key = normalizeMedicine(medicineLabel(selected));
-    const conflict = alternatives.some(other => normalizeMedicine(medicineLabel(other)) !== key);
+    const key = medicineKey(selected);
+    const conflict = alternatives.some(other => medicineKey(other) !== key && !sameMedicineFamily(selected, other));
     const singlePass = passes.length > 1 && new Set(alternatives.map(item => item.pass)).size === 1;
     return { ...selected, rowNumbers, rowNumber: selected.number ?? rowNumbers[0] ?? null,
       needsReview: selected.suspicious || conflict || singlePass || rowNumbers.some(number => numberedGroups.get(number)>1)
@@ -196,7 +267,7 @@ export function selectPrescriptionReadings(readings) {
     || (a.bbox && b.bbox ? a.bbox.y0-b.bbox.y0 || a.bbox.x0-b.bbox.x0 : 0));
   const seen = new Set();
   return selectedGroups.flatMap(selected => {
-    const key = normalizeMedicine(medicineLabel(selected));
+    const key = medicineKey(selected);
     if (seen.has(key)) return [];
     seen.add(key);
     return [{ name: selected.name, strength: selected.strength, rawText: selected.rawText,
@@ -205,8 +276,23 @@ export function selectPrescriptionReadings(readings) {
 }
 
 export function parseMedicineList(text) {
-  // Preserve decimal commas in strengths such as 0,5 mg.
-  return uniqueMedicines(String(text || "").split(/(?<!\d),|,(?!\d)|[;\n]+/).map(parseMedicine));
+  // Keep ingredient commas inside parentheses and decimal commas in strengths.
+  // A newline always starts another medicine, even if the previous bracket was mistyped.
+  const parts = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    let start = 0, depth = 0;
+    for (let index = 0; index < line.length; index++) {
+      const char = line[index];
+      if (char === '(') depth++;
+      if (char === ')') depth = Math.max(0, depth-1);
+      const decimal = char === ',' && /\d/.test(line[index-1] || '') && /\d/.test(line[index+1] || '');
+      if (!depth && (char === ';' || (char === ',' && !decimal))) {
+        parts.push(line.slice(start, index)); start = index+1;
+      }
+    }
+    parts.push(line.slice(start));
+  }
+  return uniqueMedicines(parts.map(parseMedicine));
 }
 
 export function medicineLabel(item) {
@@ -216,7 +302,7 @@ export function medicineLabel(item) {
 export function matchesMedicine(requested, stock) {
   const medicine = parseMedicine(stock.name || "");
   const strength = normalizeStrength(stock.strength || medicine.strength);
-  return normalizeMedicine(requested.name) === normalizeMedicine(medicine.name) &&
+  return normalizedMedicineName(requested.name) === normalizedMedicineName(medicine.name) &&
     (!requested.strength || normalizeStrength(requested.strength) === strength);
 }
 
