@@ -27,6 +27,11 @@ STREET_ADDRESS = {
     'display_name': 'Đường Lĩnh Nam, Vĩnh Hưng, Hà Nội, Việt Nam',
     'address': {'road': 'Đường Lĩnh Nam', 'city': 'Hà Nội', 'country_code': 'vn'},
 }
+AREA_ADDRESS = {
+    'osm_id': 3042, 'osm_type': 'way', 'lat': '20.966', 'lon': '105.792', 'addresstype': 'residential',
+    'display_name': 'Khu đô thị Mẫu, phường Hà Đông, Hà Nội, 100000, Việt Nam',
+    'address': {'residential': 'Khu đô thị Mẫu', 'suburb': 'Phường Hà Đông', 'city': 'Hà Nội', 'postcode': '100000', 'country_code': 'vn'},
+}
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -433,6 +438,130 @@ class CheckoutTests(unittest.TestCase):
         self.page.locator('#placeReviewedOrder').click()
         self.assertEqual(self.state()['orders'][0]['address'], DELIVERY_ADDRESS['display_name'])
         self.assertEqual(self.state()['orders'][0]['paymentStatus'], 'Chưa thanh toán')
+        self.assertEqual(self.state()['orders'][0]['deliveryLocation']['source'], 'geolocation')
+        self.assertFalse(self.state()['orders'][0]['deliveryLocation']['houseNumberVerified'])
+
+    def gps_area_lookup(self):
+        requests = []
+        self.page.route('https://nominatim.openstreetmap.org/reverse**', lambda route: route.fulfill(json=AREA_ADDRESS))
+        def search(route):
+            requests.append(route.request.url)
+            route.fulfill(json=[])
+        self.page.route('https://nominatim.openstreetmap.org/search**', search)
+        self.page.locator('#useCurrentDeliveryLocation').click()
+        expect(self.page.locator('#checkoutAddress')).to_have_value(AREA_ADDRESS['display_name'])
+        return requests
+
+    def test_gps_area_with_postcode_uses_coordinates_and_recipient_details(self):
+        self.page.set_viewport_size({'width': 390, 'height': 844})
+        self.context.set_geolocation({'latitude': 20.9701, 'longitude': 105.7952, 'accuracy': 15})
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        searches = self.gps_area_lookup()
+        expect(self.page.locator('#currentDeliveryMapLink')).to_have_attribute('href', 'https://www.openstreetmap.org/?mlat=20.9701&mlon=105.7952#map=18/20.9701/105.7952')
+        expect(self.page.locator('#manualAddressConfirmation')).to_be_visible()
+        expect(self.page.locator('#checkoutDeliveryDetails')).to_have_attribute('required', '')
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('điểm nhận cụ thể')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+        details = 'Tòa A2, tầng 3, căn hộ 302'
+        self.page.locator('#checkoutDeliveryDetails').fill(details)
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('xác nhận địa chỉ')
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text(details)
+        expect(self.page.locator('.review-manual')).to_contain_text('định vị')
+        self.assertEqual(searches, [])
+        self.assertIsNone(self.state())
+        self.page.locator('#backToCheckout').click()
+        expect(self.page.locator('#checkoutDeliveryDetails')).to_have_value(details)
+        expect(self.page.locator('#confirmManualDeliveryAddress')).to_be_checked()
+        self.page.locator('#cartQuantity2').fill('1')
+        self.page.locator('#confirmCheckout').click()
+        self.page.locator('#placeReviewedOrder').click()
+        expect(self.page.locator('#invoiceDialog')).to_be_visible()
+        order = self.state()['orders'][0]
+        self.assertEqual(order['address'], details + ', ' + AREA_ADDRESS['display_name'])
+        self.assertEqual(order['deliveryAddressBase'], AREA_ADDRESS['display_name'])
+        self.assertEqual(order['deliveryDetails'], details)
+        location = order['deliveryLocation']
+        self.assertEqual((location['latitude'], location['longitude']), (20.9701, 105.7952))
+        self.assertEqual(location['source'], 'geolocation')
+        self.assertEqual(location['precision'], 'position')
+        self.assertEqual(location['houseNumber'], '')
+        self.assertEqual(location['postcode'], '100000')
+        self.assertFalse(location['houseNumberVerified'])
+        self.assertTrue(location['manualConfirmed'])
+        self.assertEqual(location['confirmedDetails'], details)
+        expect(self.page.locator('#invoiceContent')).to_contain_text('Vị trí giao hàng lấy từ định vị')
+        self.assertEqual(searches, [])
+
+    def test_editing_gps_delivery_details_clears_confirmation_but_keeps_position(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        searches = self.gps_area_lookup()
+        self.page.locator('#checkoutDeliveryDetails').fill('Căn A101')
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#checkoutDeliveryDetails').fill('Căn A202')
+        expect(self.page.locator('#confirmManualDeliveryAddress')).not_to_be_checked()
+        expect(self.page.locator('#currentDeliveryMapLink')).to_be_visible()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('xác nhận địa chỉ')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text('Căn A202')
+        self.assertEqual(searches, [])
+        self.assertIsNone(self.state())
+
+    def test_editing_gps_base_address_drops_position_and_validates_the_new_address(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        searches = self.gps_area_lookup()
+        self.page.locator('#checkoutDeliveryDetails').fill('Tòa A1')
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#checkoutAddress').fill('88 Đường Không Có Thật, Hà Nội')
+        expect(self.page.locator('#currentDeliveryMapLink')).not_to_be_visible()
+        expect(self.page.locator('#manualAddressConfirmation')).not_to_be_visible()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
+        self.assertTrue(searches)
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+
+    def test_switching_from_gps_area_to_pickup_does_not_require_hidden_details(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        searches = self.gps_area_lookup()
+        self.page.locator('#checkoutFulfillment').select_option('pickup')
+        expect(self.page.locator('#checkoutDeliveryDetails')).to_be_disabled()
+        expect(self.page.locator('#manualAddressConfirmation')).not_to_be_visible()
+        self.place_order()
+        order = self.state()['orders'][0]
+        self.assertIsNone(order['deliveryLocation'])
+        self.assertEqual(order['deliveryDetails'], '')
+        self.assertEqual(order['shipping'], 0)
+        self.assertEqual(searches, [])
+
+    def test_coarse_gps_requires_confirmation_and_accepts_a_short_house_number(self):
+        self.context.set_geolocation({'latitude': 21.024, 'longitude': 105.857, 'accuracy': 1500})
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.locator('#useCurrentDeliveryLocation').click()
+        expect(self.page.locator('#checkoutAddressStatus')).to_contain_text('1500 m')
+        expect(self.page.locator('#manualAddressConfirmation')).to_be_visible()
+        self.page.locator('#checkoutDeliveryDetails').fill('4')
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        self.page.locator('#placeReviewedOrder').click()
+        order = self.state()['orders'][0]
+        self.assertEqual(order['deliveryDetails'], '4')
+        self.assertEqual(order['deliveryLocation']['accuracyMeters'], 1500)
+        self.assertFalse(order['deliveryLocation']['houseNumberVerified'])
 
     def test_geolocation_errors_keep_the_cart_and_manual_address(self):
         self.demo_checkout()
