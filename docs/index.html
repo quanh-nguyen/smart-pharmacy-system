@@ -345,7 +345,16 @@
       <p class="checkout-notice">Sản phẩm, giá và tồn kho là dữ liệu mẫu. Đơn được lưu trên trình duyệt này, chưa gửi đến nhà thuốc và không thu tiền.</p>
       <form id="checkoutForm">
         <div class="checkout-layout">
-          <section class="checkout-products" aria-labelledby="checkoutProductsTitle"><div class="checkout-section-heading"><h3 id="checkoutProductsTitle">Chọn sản phẩm</h3><span>Đơn giá / đơn vị</span></div><div id="checkoutProductList"></div></section>
+          <section class="checkout-products" aria-labelledby="checkoutProductsTitle">
+            <div class="checkout-section-heading"><h3 id="checkoutProductsTitle">Chọn sản phẩm</h3><span>Đơn giá / đơn vị</span></div>
+            <div class="checkout-search">
+              <label for="checkoutMedicineSearch">Tìm thuốc, sản phẩm</label>
+              <div class="checkout-search-control"><span aria-hidden="true">⌕</span><input id="checkoutMedicineSearch" type="search" placeholder="Nhập tên thuốc, hàm lượng..." autocomplete="off" aria-controls="checkoutProductList" aria-describedby="checkoutSearchStatus" /><button class="checkout-search-clear" id="clearCheckoutSearch" type="button" aria-label="Xóa tìm kiếm thuốc" hidden>×</button></div>
+              <p id="checkoutSearchStatus" role="status" aria-live="polite"></p>
+            </div>
+            <div id="checkoutProductList"></div>
+            <p class="checkout-search-empty" id="checkoutSearchEmpty" hidden>Không tìm thấy sản phẩm phù hợp. Thử tên khác hoặc xóa tìm kiếm.</p>
+          </section>
           <section class="checkout-details" aria-labelledby="checkoutDetailsTitle">
             <div class="checkout-section-heading"><h3 id="checkoutDetailsTitle">Thông tin nhận hàng</h3><button class="text-button" id="fillDemoOrder" type="button">Điền mẫu</button></div>
             <label for="checkoutName">Họ và tên <span>*</span></label><input id="checkoutName" name="customer" autocomplete="name" maxlength="100" required />
