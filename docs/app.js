@@ -452,6 +452,7 @@ addListener(document.querySelector("#customerOrderHistory"), "click", (event) =>
   if (order) showInvoice(order);
 });
 addListener(document, "pharmacy-order-created", () => { if (activeCustomer) renderCustomerHistory(); });
+addListener(document, "pharmacy-order-updated", () => { if (activeCustomer) renderCustomerHistory(); });
 
 document.querySelectorAll(".dashboard-tab").forEach((tab) => {
   addListener(tab, "click", () => {
