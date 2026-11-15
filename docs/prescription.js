@@ -22,6 +22,7 @@ const DOCUMENT_LABEL = /\b(?:(?:bo|so) y te|so ho so|ma (?:ho so|benh nhan|don t
 const ADDRESS = /^(?:(?:no\.?|so)\s*)?(?:\d+[\d/.-]*\s+)?(?:(?:duong|pho|ngo|ngach|hem|thon|ap|phuong|quan|huyen|thi tran|thi xa|thanh pho|tinh|khu pho|khu do thi|to dan pho|dia diem|co so|chi nhanh)\b|(?:d|p|q|h|tp|ng)\.\s*\p{L}|d\/?c\s*[:.])/u;
 const SCHEDULE = /^(?:(?:tu|den)\s+)?(?:thu\s*[2-7]\b|chu nhat\b|gio (?:kham|lam viec|mo cua)\b|lich (?:kham|lam viec)\b)/;
 const QUANTITY = /^(?:\d+(?:[.,]\d+)?\s*)?(?:vien|vi|hop|goi|ong|chai|lo|tuyp|mg|mcg|ml|iu|ui)\b/;
+const PROSE = /(?<!\p{L})(?:[ơởờỡớợôồổỗốộ]i|này|đó|của|được|hoặc)(?!\p{L})/iu;
 // Product classification is not part of the medicine name. Do not strip release forms such as (SR).
 const CLASSIFICATION = /[([]\s*(?:NT|KDNT|KĐNT|TPCN|TPBVSK|thực\s*phẩm\s*(?:chức\s*năng|bảo\s*vệ\s*sức\s*khỏe))\s*[)\]]/iu;
 
@@ -39,11 +40,44 @@ function rowMarker(value) {
   return text.match(NUMBERING);
 }
 
+function dateStamp(value) {
+  // Preserve character positions so a footer fused onto a medicine can be cut
+  // without changing its name. Dates are recognized structurally, not by city.
+  const text = String(value || '').normalize('NFC').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
+  const numeric = text.match(/(?<!\d)(?:(?:0?[1-9]|[12]\d|3[01])\s*[/.-]\s*(?:0?[1-9]|1[0-2])\s*[/.-]\s*(?:19|20)\d{2}|(?:19|20)\d{2}\s*[/.-]\s*(?:0?[1-9]|1[0-2])\s*[/.-]\s*(?:0?[1-9]|[12]\d|3[01]))(?!\d)/);
+  if (numeric) return {index:numeric.index, end:numeric.index+numeric[0].length};
+  const words = text.match(/\b(?:ngay\s*[:.,]?\s*)?(\d{1,2})\s*th[a-z.]{1,7}\s*(\d{1,2})\s*n[a-z.]{1,6}\s*((?:19|20)\d{2})(?!\d)/);
+  return words && Number(words[1]) >= 1 && Number(words[1]) <= 31 && Number(words[2]) >= 1 && Number(words[2]) <= 12
+    ? {index:words.index, end:words.index+words[0].length} : null;
+}
+
+function datedLine(value) {
+  const text = String(value || '').normalize('NFC').trim();
+  const stamp = dateStamp(text);
+  if (!stamp) return null;
+  const prefix = text.slice(0,stamp.index);
+  const separators = [...prefix.matchAll(/\s{2,}|[;|]/g)];
+  const separator = separators.at(-1);
+  const before = separator ? prefix.slice(0,separator.index).trim() : '';
+  const preserve = separator && (rowMarker(before) || STRENGTH.test(before));
+  const medicine = preserve ? before : STRENGTH.test(prefix) ? prefix.trim().replace(/[,;]+$/,'') : '';
+  const place = preserve ? prefix.slice(separator.index+separator[0].length) : prefix;
+  const marker = rowMarker(place);
+  const location = (marker ? place.slice(marker[0].length) : place).replace(/^[\s,:;]+|[\s,:;]+$/g,'');
+  const tail = text.slice(stamp.end).replace(/[\s.,;:()]+/g,'');
+  const signature = (!medicine || preserve) && !tail && !INSTRUCTION.test(normalizeMedicine(location))
+    && !ADVICE.test(normalizeMedicine(location)) && location.split(/\s+/).length <= 6;
+  return {medicine, footer: !medicine && signature, location: signature ? normalizeMedicine(location) : ''};
+}
+
 function isDocumentLine(value) {
   const text = String(value || '').trim();
   const marker = rowMarker(text);
   const body = normalizeMedicine(marker ? text.slice(marker[0].length) : text);
-  return HEADER.test(body) || INSTRUCTION.test(body) || VITALS.test(body) || ADVICE.test(body)
+  const name = parseMedicine(text).name.split('(')[0].normalize('NFC');
+  const prose = PROSE.test(name) || (/\boi\b/.test(normalizeMedicine(name)) && /\b[a-z]\d+(?:[.,]\d+)?\s*(?:mg|g|ml)\b/.test(body));
+  return (dateStamp(text) != null && !datedLine(text).medicine) || prose
+    || HEADER.test(body) || INSTRUCTION.test(body) || VITALS.test(body) || ADVICE.test(body)
     || MEDICINE_START.test(body) || DOCUMENT_LABEL.test(body) || (ADDRESS.test(body) && !STRENGTH.test(body))
     || SCHEDULE.test(body) || /\b\d{1,2}[:h]\d{2}\b/.test(body)
     || /https?:\/\/|www\.|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(body);
@@ -123,17 +157,33 @@ function mergeLines(previous, line) {
 function sourceLines(data) {
   const structured = data.lines?.length ? data.lines : (data.blocks || []).flatMap(block =>
     (block.paragraphs || []).flatMap(paragraph => paragraph.lines || []));
-  return structured.length ? structured : String(data.text || '').split(/\r?\n/).map(text => ({ text }));
+  const source = structured.length ? structured : String(data.text || '').split(/\r?\n/).map(text => ({ text }));
+  return source.flatMap(line => {
+    const parts = String(line.text || '').split(/\r?\n/).filter(text=>text.trim());
+    return parts.map(text=>({...line,text,sharedBounds:line.sharedBounds || parts.length > 1}));
+  });
+}
+
+function isNumberedMedicineLine(line) {
+  const text=cleanOcrLine(line.text), marker=rowMarker(text);
+  if (!marker || isDocumentLine(text)) return false;
+  const body=text.slice(marker[0].length);
+  return !QUANTITY.test(normalizeMedicine(body)) && readableMedicineName(cleanOcrName(parseMedicine(body).name),[]);
 }
 
 function medicineSection(readings) {
-  const lines = readings.flatMap(sourceLines).filter(line => lineBounds(line));
+  const all = readings.flatMap(sourceLines);
+  const lines = all.filter(line => lineBounds(line) && !line.sharedBounds);
   const starts = lines.filter(line => MEDICINE_START.test(normalizeMedicine(line.text)) && !STRENGTH.test(line.text));
   const top = starts.length ? Math.min(...starts.map(line => line.bbox.y1)) : null;
   const first = lines.filter(line => Number(rowMarker(cleanOcrLine(line.text))?.[1]) === 1 && (STRENGTH.test(line.text) || CLASSIFICATION.test(line.text)));
-  const anchor = top ?? (first.length ? Math.min(...first.map(line => line.bbox.y0)) : null);
-  const ends = lines.filter(line => anchor != null && line.bbox.y0 > anchor && MEDICINE_END.test(normalizeMedicine(line.text)));
+  const numbered=lines.filter(isNumberedMedicineLine);
+  const dateAnchor=numbered.length ? Math.min(...numbered.map(line=>line.bbox.y0)) : null;
+  const anchor = top ?? (first.length ? Math.min(...first.map(line => line.bbox.y0)) : null) ?? dateAnchor;
+  const ends = lines.filter(line => anchor != null && line.bbox.y0 > anchor
+    && (MEDICINE_END.test(normalizeMedicine(line.text)) || (dateAnchor != null && line.bbox.y0 > dateAnchor && datedLine(line.text)?.footer)));
   return {top, bottom: ends.length ? Math.min(...ends.map(line => line.bbox.y0)) : null,
+    footerNames:new Set(all.map(line=>datedLine(line.text)?.location).filter(Boolean)),
     first: first.length ? Math.min(...first.map(line => line.bbox.y0)) : null};
 }
 
@@ -141,10 +191,12 @@ function medicineSectionLines(data, section) {
   const lines = sourceLines(data);
   const start = lines.findIndex(line => MEDICINE_START.test(normalizeMedicine(line.text)) && !STRENGTH.test(line.text));
   const anchor = start >= 0 ? start : lines.findIndex(line => rowMarker(cleanOcrLine(line.text)) && STRENGTH.test(line.text));
-  const end = lines.findIndex((line,index) => anchor >= 0 && index > anchor && MEDICINE_END.test(normalizeMedicine(line.text)));
+  const dateAnchor=lines.findIndex(isNumberedMedicineLine);
+  const end = lines.findIndex((line,index) => (anchor >= 0 && index > anchor && MEDICINE_END.test(normalizeMedicine(line.text)))
+    || (dateAnchor >= 0 && index > dateAnchor && datedLine(line.text)?.footer));
   return lines.filter((line,index) => {
     const box = lineBounds(line);
-    if (box && section && (section.top != null || section.bottom != null)) {
+    if (box && !line.sharedBounds && section && (section.top != null || section.bottom != null)) {
       const middle = (box.y0+box.y1)/2;
       return (section.top == null || middle > section.top) && (section.bottom == null || middle < section.bottom);
     }
@@ -186,9 +238,11 @@ function printedAliases(rawText) {
 }
 
 function prescriptionCandidates(data, section) {
+  section ||= medicineSection([data]);
   const source = medicineSectionLines(data, section).flatMap(line => {
-    const parts = String(line.text || '').split(/\s+(?=[‘’'"“”]*\(?\d{1,2}\s*[.)/]\s+\p{L})/u).filter(text => text.trim());
-    return parts.filter(text => !isDocumentLine(text)).map(text => ({...line, text: cleanOcrLine(text), sharedBounds: parts.length > 1}));
+    const text = datedLine(line.text)?.medicine || line.text;
+    const parts = String(text || '').split(/\s+(?=[‘’'"“”]*\(?\d{1,2}\s*[.)/]\s+\p{L})/u).filter(text => text.trim());
+    return parts.filter(text => !isDocumentLine(text)).map(text => ({...line, text: cleanOcrLine(text), sharedBounds: line.sharedBounds || parts.length > 1}));
   });
   const lines = [];
   for (const line of source) {
@@ -214,6 +268,7 @@ function prescriptionCandidates(data, section) {
     const item = parseMedicine(rawText);
     item.name = cleanOcrName(item.name);
     if (!uniqueMedicines([item]).length) return [];
+    if (!item.strength && section.footerNames.has(normalizeMedicine(item.name))) return [];
     // A short code without a dose/classification is too weak to be a medicine;
     // table rules can otherwise be recognized as numbered tokens such as "EE".
     if (/^[A-Z]{2}$/.test(item.name) && !item.strength && !CLASSIFICATION.test(rawText)) return [];
