@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="./style.css" />
     <link rel="stylesheet" href="./search-enhancements.css" />
+    <link rel="stylesheet" href="./checkout.css" />
   </head>
   <body>
     <header>
@@ -18,6 +19,7 @@
         <a class="owner-link" href="./pharmacy/index.html">Bạn là chủ hiệu thuốc?</a>
         <div class="nav-account-actions">
           <span class="customer-nav-greeting hidden" id="customerNavGreeting"></span>
+          <button class="account-nav-button" id="checkoutHistoryButton" type="button">Đơn demo &amp; hóa đơn</button>
           <button class="account-nav-button hidden" id="customerHistoryButton" type="button" aria-controls="customerDashboard">Lịch sử đơn thuốc</button>
           <button class="account-nav-button" id="customerLoginButton" type="button">Đăng nhập</button>
           <button class="account-nav-button account-nav-primary" id="customerRegisterButton" type="button">Tạo tài khoản</button>
@@ -101,6 +103,11 @@
         </div>
 
         <p class="status" id="status" role="status" aria-live="polite"></p>
+        <aside class="order-demo-prompt">
+          <span class="order-demo-icon" aria-hidden="true">▤</span>
+          <div><strong>Thử đặt hàng, nhận hóa đơn ngay</strong><p>3 nhà thuốc mẫu, có sẵn sản phẩm và thông tin khách hàng để bạn trải nghiệm.</p></div>
+          <button class="primary" id="loadOrderDemo" type="button">Thử đặt hàng demo <span aria-hidden="true">→</span></button>
+        </aside>
       </section>
 
       <section class="container results hidden" id="results">
@@ -110,7 +117,7 @@
             <h2>Nhà thuốc gần bạn</h2>
             <p class="filter-hint" id="pharmacyResultSummary" role="status"></p>
           </div>
-          <span id="resultNote">Sắp xếp theo khoảng cách</span>
+          <span id="resultNote" aria-live="polite">Sắp xếp theo quãng đường bộ</span>
         </div>
 
         <div class="search-filters" aria-label="Bộ lọc tìm nhà thuốc">
@@ -121,9 +128,10 @@
             <option value="5000">Trong 5 km</option>
             <option value="10000">Trong 10 km</option>
           </select>
-          <p class="filter-hint">Đổi bán kính để tìm lại nhà thuốc. Dữ liệu từ OpenStreetMap có thể chưa đầy đủ. Khoảng cách hiển thị là đường chim bay.</p>
+          <p class="filter-hint" id="roadDistanceHint">Đổi bán kính để tìm lại nhà thuốc. Khoảng cách hiển thị theo tuyến lái xe từ điểm bắt đầu, sắp xếp gần đến xa. Dữ liệu từ OpenStreetMap có thể chưa đầy đủ.</p>
         </div>
         <div id="map"></div>
+        <p class="route-status" id="routeStatus" role="status"></p>
 
         <div class="pharmacy-list" id="pharmacyList" role="region" aria-label="Danh sách nhà thuốc tìm được"></div>
         <aside class="add-pharmacy-prompt" aria-label="Đóng góp nhà thuốc">
@@ -331,6 +339,39 @@
         </aside>
       </div>
     </div>
+
+    <dialog class="shop-dialog checkout-dialog" id="checkoutDialog" aria-labelledby="checkoutTitle">
+      <div class="shop-dialog-heading"><div><p class="tag">ĐẶT HÀNG DEMO</p><h2 id="checkoutTitle">Đặt hàng tại nhà thuốc</h2><p id="checkoutPharmacyAddress"></p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Đóng cửa sổ đặt hàng">×</button></div>
+      <p class="checkout-notice">Sản phẩm, giá và tồn kho là dữ liệu mẫu. Đơn được lưu trên trình duyệt này, chưa gửi đến nhà thuốc và không thu tiền.</p>
+      <form id="checkoutForm">
+        <div class="checkout-layout">
+          <section class="checkout-products" aria-labelledby="checkoutProductsTitle"><div class="checkout-section-heading"><h3 id="checkoutProductsTitle">Chọn sản phẩm</h3><span>Đơn giá / đơn vị</span></div><div id="checkoutProductList"></div></section>
+          <section class="checkout-details" aria-labelledby="checkoutDetailsTitle">
+            <div class="checkout-section-heading"><h3 id="checkoutDetailsTitle">Thông tin nhận hàng</h3><button class="text-button" id="fillDemoOrder" type="button">Điền mẫu</button></div>
+            <label for="checkoutName">Họ và tên <span>*</span></label><input id="checkoutName" name="customer" autocomplete="name" maxlength="100" required />
+            <label for="checkoutPhone">Số điện thoại <span>*</span></label><input id="checkoutPhone" name="phone" type="tel" autocomplete="tel" maxlength="20" title="Nhập số điện thoại từ 9 đến 15 chữ số" required />
+            <label for="checkoutEmail">Email (để xem trong lịch sử tài khoản)</label><input id="checkoutEmail" name="email" type="email" autocomplete="email" maxlength="160" />
+            <label for="checkoutFulfillment">Cách nhận hàng</label><select id="checkoutFulfillment" name="fulfillment"><option value="pickup">Nhận tại nhà thuốc · Miễn phí</option><option value="delivery">Giao tận nơi · 15.000 ₫ (demo)</option></select>
+            <div id="checkoutAddressField" hidden><label for="checkoutAddress">Địa chỉ giao hàng <span>*</span></label><textarea id="checkoutAddress" name="address" autocomplete="street-address" maxlength="300" rows="2" disabled></textarea></div>
+            <label for="checkoutNote">Ghi chú (không bắt buộc)</label><textarea id="checkoutNote" name="note" maxlength="500" rows="2" placeholder="Lời nhắn cho nhà thuốc..."></textarea>
+            <div class="checkout-summary" aria-live="polite"><div><span>Tạm tính <small id="checkoutItemCount">(0 sản phẩm)</small></span><strong id="checkoutSubtotal">0 ₫</strong></div><div><span>Phí giao hàng</span><strong id="checkoutShipping">0 ₫</strong></div><div class="checkout-total"><span>Tổng thanh toán</span><strong id="checkoutTotal">0 ₫</strong></div><p id="checkoutPaymentNote">Thanh toán tại nhà thuốc khi nhận hàng.</p></div>
+          </section>
+        </div>
+        <p id="checkoutError" class="checkout-error" role="alert"></p>
+        <div class="shop-dialog-footer"><span>Hóa đơn hiện ngay sau khi đặt. Bạn có thể mở lại trong lịch sử đơn hàng.</span><button class="primary" id="confirmCheckout" type="submit" disabled>Đặt hàng demo <span aria-hidden="true">→</span></button></div>
+      </form>
+    </dialog>
+
+    <dialog class="shop-dialog invoice-dialog" id="invoiceDialog" aria-labelledby="invoiceTitle">
+      <div class="shop-dialog-heading no-print"><div><p class="tag">ĐẶT HÀNG THÀNH CÔNG</p><h2 id="invoiceTitle">Hóa đơn của bạn</h2></div><button class="dialog-close" type="button" data-close-dialog aria-label="Đóng hóa đơn">×</button></div>
+      <div id="invoiceContent"></div>
+      <div class="shop-dialog-footer no-print"><button class="outline-button" id="downloadInvoice" type="button">Tải hóa đơn (.html)</button><button class="primary" id="printInvoice" type="button">In / Lưu PDF</button></div>
+    </dialog>
+
+    <dialog class="shop-dialog history-dialog" id="checkoutHistoryDialog" aria-labelledby="checkoutHistoryTitle">
+      <div class="shop-dialog-heading"><div><p class="tag">ĐƠN HÀNG DEMO</p><h2 id="checkoutHistoryTitle">Đơn hàng &amp; hóa đơn</h2><p>Các đơn đã đặt trên trình duyệt này. Bạn có thể mở lại và xuất hóa đơn.</p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Đóng lịch sử đơn hàng">×</button></div>
+      <div id="checkoutHistoryList"></div>
+    </dialog>
 
     <footer>Hệ thống tìm nhà thuốc gần nhất</footer>
     <script src="./runtime-config.js"></script>
