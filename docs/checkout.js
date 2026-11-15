@@ -99,6 +99,9 @@ checkoutForm.addEventListener("invalid", (event) => {
     medicineSearch.value = "";
     filterCheckoutProducts();
   }
+  if (event.target.id === 'checkoutDeliveryDetails') {
+    $("#checkoutAddressError").textContent = 'Vui lòng bổ sung số nhà, tòa/căn hộ hoặc điểm nhận cụ thể cho vị trí định vị.';
+  }
 }, true);
 
 export function openPharmacyOrder(pharmacy, customer = null) {
@@ -152,6 +155,7 @@ function updateFulfillment() {
   $("#checkoutAddress").disabled = !delivery;
   $("#checkoutAddress").required = delivery;
   $("#checkoutPaymentNote").textContent = delivery ? "Thanh toán trực tiếp khi nhận hàng (COD). Phí giao hàng minh họa cố định 15.000 ₫." : "Thanh toán trực tiếp tại nhà thuốc khi nhận hàng.";
+  updateDeliveryDetailsRequirements();
   updateSummary();
 }
 
@@ -190,7 +194,24 @@ $("#checkoutProductList").addEventListener("click", (event) => {
 });
 $("#checkoutFulfillment").addEventListener("change", updateFulfillment);
 $("#checkoutFulfillment").addEventListener("change", clearAddressVerification);
-$("#checkoutAddress").addEventListener("input", clearAddressVerification);
+$("#checkoutAddress").addEventListener("input", () => {
+  const wasLocated = checkout?.addressVerification?.source === 'geolocation';
+  clearAddressVerification();
+  if (wasLocated) $("#checkoutAddressStatus").textContent = 'Địa chỉ định vị đã thay đổi. Hãy định vị lại hoặc nhập địa chỉ thủ công; thông tin tòa/căn hộ có thể điền ở ô bên dưới.';
+});
+$("#checkoutDeliveryDetails").addEventListener('input', () => {
+  $("#checkoutDeliveryDetails").setCustomValidity('');
+  const verification = checkout?.addressVerification;
+  if (!verification) return;
+  $("#checkoutAddressError").textContent = '';
+  if (requiresManualAddressConfirmation(verification)) {
+    verification.manualConfirmed = false;
+    verification.manualConfirmedAt = null;
+    verification.confirmedDetails = null;
+    $("#confirmManualDeliveryAddress").checked = false;
+    $("#checkoutAddressStatus").textContent = 'Thông tin nhận hàng đã thay đổi. Vui lòng xác nhận lại địa chỉ bên dưới.';
+  }
+});
 $("#checkoutPhone").addEventListener("input", () => $("#checkoutPhone").setCustomValidity(""));
 $("#fillDemoOrder").addEventListener("click", () => {
   if (!checkout) return;
@@ -208,6 +229,32 @@ $("#fillDemoOrder").addEventListener("click", () => {
   updateSummary();
 });
 
+function requiresManualAddressConfirmation(verification) {
+  return verification?.precision === 'street' || (verification?.precision === 'position' && verification.needsManualConfirmation);
+}
+
+function updateDeliveryDetailsRequirements() {
+  const delivery = $("#checkoutFulfillment").value === 'delivery';
+  const required = Boolean(delivery && checkout?.addressVerification?.requiresDetails);
+  $("#checkoutDeliveryDetails").disabled = !delivery;
+  $("#checkoutDeliveryDetails").required = required;
+  $("#deliveryDetailsRequired").hidden = !required;
+  if (!required) $("#checkoutDeliveryDetails").setCustomValidity('');
+}
+
+function configureManualAddressConfirmation(verification) {
+  const located = verification?.precision === 'position';
+  $("#manualAddressConfirmation").hidden = !requiresManualAddressConfirmation(verification);
+  $("#confirmManualDeliveryAddress").checked = Boolean(verification?.manualConfirmed);
+  $("#manualAddressHint").textContent = located
+    ? 'Đã xác định vị trí hiện tại trên bản đồ. Địa chỉ tự động có thể chỉ là khu vực; hãy bổ sung điểm nhận cụ thể và kiểm tra vị trí giao hàng.'
+    : 'Đã đối chiếu được đường/khu vực. Bản đồ chưa xác minh được số nhà, ngõ/ngách hoặc phường/xã bạn nhập.';
+  $("#manualAddressLabel").textContent = located
+    ? 'Tôi xác nhận vị trí trên bản đồ và thông tin nhận hàng bổ sung là chính xác.'
+    : 'Tôi xác nhận số nhà, ngõ/ngách và địa chỉ giao hàng đã nhập là chính xác.';
+  updateDeliveryDetailsRequirements();
+}
+
 function clearAddressVerification({ preserveReviewIntent = false } = {}) {
   addressLookupVersion++;
   addressLookup?.abort();
@@ -224,6 +271,10 @@ function clearAddressVerification({ preserveReviewIntent = false } = {}) {
   $("#checkoutAddressResults > div").replaceChildren();
   $("#manualAddressConfirmation").hidden = true;
   $("#confirmManualDeliveryAddress").checked = false;
+  $("#currentDeliveryMapLink").hidden = true;
+  $("#currentDeliveryMapLink").removeAttribute('href');
+  $("#checkoutDeliveryDetails").setCustomValidity('');
+  updateDeliveryDetailsRequirements();
   $("#useCurrentDeliveryLocation").disabled = false;
   $("#useCurrentDeliveryLocation").textContent = "Dùng vị trí hiện tại";
   updateSummary();
@@ -239,19 +290,19 @@ function selectDeliveryAddress(match) {
     : 'Đã kiểm tra địa chỉ nhận hàng trên bản đồ.';
   $("#checkoutAddressStatus").classList.toggle("is-verified", !manual);
   $("#checkoutAddressStatus").classList.toggle("is-partial", manual);
-  $("#manualAddressConfirmation").hidden = !manual;
-  $("#confirmManualDeliveryAddress").checked = false;
+  configureManualAddressConfirmation(checkout.addressVerification);
   $("#checkoutAddressError").textContent = "";
 }
 
 $("#confirmManualDeliveryAddress").addEventListener('change', event => {
   const verified = checkout?.addressVerification;
-  if (!verified || verified.precision !== 'street' || verified.input !== $("#checkoutAddress").value.trim()) return;
+  if (!requiresManualAddressConfirmation(verified) || verified.input !== $("#checkoutAddress").value.trim()) return;
   verified.manualConfirmed = event.target.checked;
   verified.manualConfirmedAt = event.target.checked ? new Date().toISOString() : null;
+  verified.confirmedDetails = event.target.checked ? $("#checkoutDeliveryDetails").value.trim() : null;
   $("#checkoutAddressError").textContent = '';
   $("#checkoutAddressStatus").textContent = event.target.checked
-    ? 'Bạn đã xác nhận địa chỉ chi tiết; đường/khu vực đã được đối chiếu trên bản đồ.'
+    ? verified.precision === 'position' ? 'Bạn đã xác nhận vị trí định vị và thông tin nhận hàng cụ thể.' : 'Bạn đã xác nhận địa chỉ chi tiết; đường/khu vực đã được đối chiếu trên bản đồ.'
     : 'Hãy xác nhận số nhà, ngõ/ngách và địa chỉ chi tiết trước khi kiểm tra đơn hàng.';
 });
 
@@ -339,9 +390,19 @@ $("#useCurrentDeliveryLocation").addEventListener('click', async () => {
     const result = await addressAtCurrentPosition(position.coords.latitude, position.coords.longitude, { signal: controller.signal });
     if (controller.signal.aborted || version !== addressLookupVersion || checkout !== currentCheckout) return;
     $("#checkoutAddress").value = result.label;
-    $("#checkoutAddressStatus").textContent = result.complete
-      ? 'Đã điền địa chỉ gần vị trí hiện tại. Hãy kiểm tra số nhà trước khi bấm Kiểm tra đơn hàng.'
-      : 'Đã điền khu vực gần vị trí hiện tại. Hãy bổ sung số nhà, tên đường trước khi bấm Kiểm tra đơn hàng.';
+    const accuracy = Number.isFinite(position.coords.accuracy) && position.coords.accuracy >= 0 ? position.coords.accuracy : null;
+    const requiresDetails = !result.complete || (accuracy !== null && accuracy > 100);
+    // Preserve the device coordinates and reverse-geocoded area instead of trying
+    // to forward-geocode the formatted label as a house/street address later.
+    checkout.addressVerification = { ...result, input: result.label, verifiedAt: new Date().toISOString(), accuracyMeters: accuracy,
+      requiresDetails, needsManualConfirmation: requiresDetails, manualConfirmed: false, manualConfirmedAt: null, confirmedDetails: null };
+    configureManualAddressConfirmation(checkout.addressVerification);
+    $("#currentDeliveryMapLink").href = `https://www.openstreetmap.org/?mlat=${result.latitude}&mlon=${result.longitude}#map=18/${result.latitude}/${result.longitude}`;
+    $("#currentDeliveryMapLink").hidden = false;
+    $("#checkoutAddressStatus").classList.add('is-partial');
+    $("#checkoutAddressStatus").textContent = requiresDetails
+      ? 'Đã điền khu vực gần vị trí hiện tại. Hãy bổ sung số nhà, tòa/căn hộ hoặc điểm nhận cụ thể ở ô bên dưới, rồi xác nhận vị trí giao hàng.'
+      : 'Đã điền địa chỉ gần vị trí hiện tại. Hãy kiểm tra số nhà; có thể bổ sung tòa/căn hộ ở ô bên dưới.';
     if (Number.isFinite(position.coords.accuracy) && position.coords.accuracy > 100) {
       $("#checkoutAddressStatus").textContent += ` Độ chính xác định vị khoảng ${Math.round(position.coords.accuracy)} m.`;
     }
@@ -361,6 +422,12 @@ $("#useCurrentDeliveryLocation").addEventListener('click', async () => {
 checkoutDialog.addEventListener('close', () => { addressLookup?.abort(); });
 
 function orderDraft({ requireVerified = true } = {}) {
+  const delivery = $("#checkoutFulfillment").value === 'delivery';
+  const details = delivery ? $("#checkoutDeliveryDetails").value.trim() : '';
+  const verification = checkout.addressVerification;
+  if (delivery && verification?.requiresDetails && (!details || !/[\p{L}\p{N}]/u.test(details))) {
+    $("#checkoutDeliveryDetails").setCustomValidity('Vui lòng bổ sung số nhà, tòa/căn hộ hoặc điểm nhận cụ thể.');
+  } else $("#checkoutDeliveryDetails").setCustomValidity('');
   const phone = $("#checkoutPhone").value.trim();
   const digits = phone.replace(/\D/g, "");
   if (!/^\+?[\d\s().-]+$/.test(phone) || digits.length < 9 || digits.length > 15) {
@@ -368,17 +435,17 @@ function orderDraft({ requireVerified = true } = {}) {
   }
   if (!checkoutForm.reportValidity()) return null;
   const customer = $("#checkoutName").value.trim();
-  const delivery = $("#checkoutFulfillment").value === "delivery";
-  const address = delivery ? $("#checkoutAddress").value.trim() : checkout.pharmacy.address;
-  if (!customer || !address) {
+  const baseAddress = delivery ? $("#checkoutAddress").value.trim() : checkout.pharmacy.address;
+  const address = delivery && details ? `${details}, ${baseAddress}` : baseAddress;
+  if (!customer || !baseAddress) {
     throw new Error("Vui lòng nhập họ tên và địa chỉ nhận hàng hợp lệ.");
   }
-  if (delivery && requireVerified && (!checkout.addressVerification || checkout.addressVerification.input !== address)) {
+  if (delivery && requireVerified && (!verification || verification.input !== baseAddress)) {
     $("#checkoutAddressError").textContent = "Chưa kiểm tra được địa chỉ giao hàng. Hãy kiểm tra lại số nhà và tên đường.";
     $("#checkoutAddress").focus();
     return null;
   }
-  if (delivery && requireVerified && checkout.addressVerification.precision === 'street' && !checkout.addressVerification.manualConfirmed) {
+  if (delivery && requireVerified && requiresManualAddressConfirmation(verification) && (!verification.manualConfirmed || verification.confirmedDetails !== details)) {
     $("#checkoutAddressError").textContent = 'Vui lòng xác nhận địa chỉ chi tiết đã nhập trước khi tiếp tục.';
     $("#confirmManualDeliveryAddress").focus();
     return null;
@@ -389,6 +456,7 @@ function orderDraft({ requireVerified = true } = {}) {
   const shipping = delivery ? SHIPPING_FEE : 0;
   return { pharmacy: checkout.pharmacy, customer, customerPhone: phone,
     customerEmail: $("#checkoutEmail").value.trim().toLowerCase(), fulfillment: delivery ? "delivery" : "pickup", address,
+    deliveryAddressBase: delivery ? baseAddress : null, deliveryDetails: details,
     deliveryLocation: delivery && checkout.addressVerification ? { ...checkout.addressVerification } : null,
     note: $("#checkoutNote").value.trim(), items, subtotal, shipping, total: subtotal + shipping };
 }
@@ -406,7 +474,7 @@ function checkStock(state, draft) {
 function reviewMarkup(draft) {
   return `<article class="review-sheet"><h3>${escapeHtml(draft.pharmacy.name)}</h3>
     <div class="invoice-customer"><div><h4>NGƯỜI NHẬN</h4><p>${escapeHtml(draft.customer)}</p><p>${escapeHtml(draft.customerPhone)}</p>${draft.customerEmail ? `<p>${escapeHtml(draft.customerEmail)}</p>` : ""}</div>
-    <div><h4>${draft.fulfillment === 'delivery' ? 'GIAO TẬN NƠI' : 'NHẬN TẠI NHÀ THUỐC'}</h4><p>${escapeHtml(draft.address)}</p>${draft.deliveryLocation ? draft.deliveryLocation.precision === 'street' ? '<p class="review-manual">Đường/khu vực đã đối chiếu bản đồ; số nhà, ngõ/ngách và địa chỉ chi tiết do bạn xác nhận.</p>' : '<p class="review-verified">✓ Đã kiểm tra địa chỉ trên bản đồ</p>' : ''}<p>Thanh toán trực tiếp ${draft.fulfillment === 'delivery' ? 'khi nhận hàng (COD)' : 'tại nhà thuốc'}</p></div></div>
+    <div><h4>${draft.fulfillment === 'delivery' ? 'GIAO TẬN NƠI' : 'NHẬN TẠI NHÀ THUỐC'}</h4><p>${escapeHtml(draft.address)}</p>${draft.deliveryLocation ? draft.deliveryLocation.precision === 'position' ? '<p class="review-manual">Vị trí giao hàng lấy từ định vị; hãy kiểm tra điểm nhận và thông tin số nhà/tòa/căn hộ trước khi xác nhận.</p>' : draft.deliveryLocation.precision === 'street' ? '<p class="review-manual">Đường/khu vực đã đối chiếu bản đồ; số nhà, ngõ/ngách và địa chỉ chi tiết do bạn xác nhận.</p>' : '<p class="review-verified">✓ Đã kiểm tra địa chỉ trên bản đồ</p>' : ''}<p>Thanh toán trực tiếp ${draft.fulfillment === 'delivery' ? 'khi nhận hàng (COD)' : 'tại nhà thuốc'}</p></div></div>
     <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>Thuốc / sản phẩm</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${draft.items.map(item => `<tr><td>${escapeHtml(item.name)}<br><small>${escapeHtml(item.unit)}</small></td><td>${item.quantity}</td><td>${money(item.price)}</td><td>${money(item.total)}</td></tr>`).join('')}</tbody></table></div>
     <div class="invoice-totals"><div><span>Tạm tính</span><strong>${money(draft.subtotal)}</strong></div><div><span>Phí giao hàng</span><strong>${money(draft.shipping)}</strong></div><div><span>Tổng thanh toán</span><strong>${money(draft.total)}</strong></div></div>
     ${draft.note ? `<p><strong>Ghi chú:</strong> ${escapeHtml(draft.note)}</p>` : ''}</article>`;
@@ -423,7 +491,7 @@ checkoutForm.addEventListener("submit", async (event) => {
     checkStock(readState(), initialDraft);
     checkout.reviewIntent = intent;
     updateSummary();
-    if (initialDraft.fulfillment === 'delivery' && (!checkout.addressVerification || checkout.addressVerification.input !== initialDraft.address)) {
+    if (initialDraft.fulfillment === 'delivery' && (!checkout.addressVerification || checkout.addressVerification.input !== initialDraft.deliveryAddressBase)) {
       if (!await checkDeliveryAddress()) return;
     }
     if (checkout !== currentCheckout || checkout.reviewIntent !== intent || !checkoutDialog.open) return;
@@ -466,8 +534,11 @@ $("#placeReviewedOrder").addEventListener('click', () => {
     const draft = checkout.review;
     const catalog = checkStock(state, draft);
     const now = new Date().toISOString();
+    const deliveryLocation = draft.deliveryLocation?.precision === 'position'
+      ? { ...draft.deliveryLocation, manualConfirmed: true, manualConfirmedAt: draft.deliveryLocation.manualConfirmedAt || now, confirmedDetails: draft.deliveryDetails }
+      : draft.deliveryLocation;
     const order = {
-      ...draft, id: `DH-${crypto.randomUUID().toUpperCase()}`, createdAt: now, confirmedAt: now,
+      ...draft, deliveryLocation, id: `DH-${crypto.randomUUID().toUpperCase()}`, createdAt: now, confirmedAt: now,
       status: "Đã xác nhận · Demo", paymentStatus: "Chưa thanh toán", isDemo: true,
     };
     state.inventories[checkout.pharmacy.id] = catalog.map((product) => ({ ...product,
@@ -497,6 +568,7 @@ function invoiceMarkup(order) {
     <div class="invoice-top"><div><div class="invoice-brand">✚ Smart Pharmacy</div><h3>${order.isDemo ? "HÓA ĐƠN DEMO" : "HÓA ĐƠN ĐẶT HÀNG"}</h3><p>${escapeHtml(order.pharmacy.name)}</p><p>${escapeHtml(order.pharmacy.address)}</p></div><div><p><strong>${escapeHtml(order.id)}</strong></p><p>${escapeHtml(date)}</p><span class="invoice-status${confirmed ? " is-confirmed" : ""}">${escapeHtml(order.isDemo ? order.status : order.paymentStatus)}</span><p>${escapeHtml(order.isDemo ? order.paymentStatus : order.status)}</p>${confirmed ? `<p>Xác nhận lúc ${escapeHtml(new Date(order.confirmedAt).toLocaleString("vi-VN"))}</p>` : ""}</div></div>
     <div class="invoice-customer"><div><h4>KHÁCH HÀNG</h4><p><strong>${escapeHtml(order.customer)}</strong></p><p>${escapeHtml(order.customerPhone)}</p>${order.customerEmail ? `<p>${escapeHtml(order.customerEmail)}</p>` : ""}</div><div><h4>${order.fulfillment === "delivery" ? "GIAO TẬN NƠI" : "NHẬN TẠI NHÀ THUỐC"}</h4><p>${escapeHtml(order.address)}</p><p>${order.fulfillment === "delivery" ? "Thanh toán trực tiếp khi nhận hàng (COD)" : "Thanh toán trực tiếp tại nhà thuốc"}</p></div></div>
     ${order.deliveryLocation?.precision === 'street' ? '<p>Đường/khu vực đã đối chiếu bản đồ; địa chỉ chi tiết nhập thủ công được khách hàng xác nhận.</p>' : ''}
+    ${order.deliveryLocation?.precision === 'position' ? '<p>Vị trí giao hàng lấy từ định vị; thông tin số nhà/tòa/căn hộ được người nhận xác nhận.</p>' : ''}
     <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>Sản phẩm</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${order.items.map((item) => `<tr><td>${escapeHtml(item.name)}<br><small>${escapeHtml(item.unit)}</small></td><td>${item.quantity}</td><td>${money(item.price)}</td><td>${money(item.total)}</td></tr>`).join("")}</tbody></table></div>
     <div class="invoice-totals"><div><span>Tạm tính</span><strong>${money(order.subtotal)}</strong></div><div><span>Phí giao hàng</span><strong>${money(order.shipping)}</strong></div><div><span>Tổng thanh toán</span><strong>${money(order.total)}</strong></div></div>
     ${order.note ? `<p><strong>Ghi chú:</strong> ${escapeHtml(order.note)}</p>` : ""}
