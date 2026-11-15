@@ -816,8 +816,8 @@ function updatePrescriptionControls() {
     const review = prescriptionReviewItems.get(medicineLabel(item));
     if (review?.needsReview) {
       li.classList.add("needs-review");
-      li.textContent += " — cần đối chiếu ảnh";
-      li.title = `Chữ đọc từ ảnh: ${review.rawText}`;
+      li.setAttribute('aria-label', `${medicineLabel(item)} — cần đối chiếu ảnh`);
+      li.title = `Cần đối chiếu ảnh. Chữ đọc từ ảnh: ${review.rawText}`;
     }
     return li;
   }));
@@ -893,8 +893,8 @@ async function recognizePrescription(file) {
     const numbers = [...new Set(medicines.flatMap(item => item.rowNumbers || []))].sort((a,b)=>a-b);
     const gap = numbers.length > 1 && numbers[0] === 1 && numbers.at(-1) <= 30 && numbers.some((number,index)=>number !== index+1);
     setPrescriptionStatus(medicines.length
-      ? `Đã nhận diện ${medicines.length} loại thuốc.${uncertain ? ` Có ${uncertain} dòng chưa chắc chắn, cần đối chiếu ảnh gốc.` : ""}${gap ? ' Số thứ tự chưa liên tục; hãy kiểm tra các dòng có thể bị thiếu trong ảnh gốc.' : ''} Hãy kiểm tra đủ các dòng, tên, hàm lượng và xác nhận danh sách.`
-      : "Chưa nhận diện được thuốc. Hãy chụp ảnh rõ hơn hoặc nhập tên thuốc bên dưới.", medicines.length ? "ready" : "error");
+      ? `Đã lọc được ${medicines.length} loại thuốc.${uncertain ? ` Có ${uncertain} dòng chưa chắc chắn (màu vàng).` : ""}${gap ? ' Số thứ tự chưa liên tục; hãy đối chiếu ảnh gốc.' : ''}`
+      : "Chưa lọc được tên thuốc rõ ràng. Hãy đối chiếu ảnh, xem văn bản đầy đủ hoặc nhập tên thuốc bên dưới.", medicines.length ? "ready" : "error");
   } catch (error) {
     if (prescriptionOcrController !== controller) return;
     setPrescriptionStatus(error.name === "TimeoutError"
