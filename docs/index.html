@@ -361,14 +361,29 @@
             <label for="checkoutPhone">Số điện thoại <span>*</span></label><input id="checkoutPhone" name="phone" type="tel" autocomplete="tel" maxlength="20" title="Nhập số điện thoại từ 9 đến 15 chữ số" required />
             <label for="checkoutEmail">Email (để xem trong lịch sử tài khoản)</label><input id="checkoutEmail" name="email" type="email" autocomplete="email" maxlength="160" />
             <label for="checkoutFulfillment">Cách nhận hàng</label><select id="checkoutFulfillment" name="fulfillment"><option value="pickup">Nhận tại nhà thuốc · Miễn phí</option><option value="delivery">Giao tận nơi · 15.000 ₫ (demo)</option></select>
-            <div id="checkoutAddressField" hidden><label for="checkoutAddress">Địa chỉ giao hàng <span>*</span></label><textarea id="checkoutAddress" name="address" autocomplete="street-address" maxlength="300" rows="2" disabled></textarea></div>
+            <div id="checkoutAddressField" hidden>
+              <label for="checkoutAddress">Địa chỉ giao hàng <span>*</span></label><textarea id="checkoutAddress" name="address" autocomplete="street-address" maxlength="500" rows="2" placeholder="Số nhà, tên đường, phường/xã, tỉnh/thành phố" aria-describedby="checkoutAddressHint checkoutAddressStatus checkoutAddressError" disabled></textarea>
+              <p class="address-hint" id="checkoutAddressHint">Nhập địa chỉ rồi kiểm tra và chọn đúng kết quả trên bản đồ. Tầng, căn hộ hoặc hướng dẫn giao hàng có thể ghi ở phần ghi chú.</p>
+              <button class="outline-button" id="verifyDeliveryAddress" type="button">Kiểm tra địa chỉ</button>
+              <p class="address-status" id="checkoutAddressStatus" role="status"></p>
+              <p class="address-error" id="checkoutAddressError" role="alert"></p>
+              <fieldset class="address-results" id="checkoutAddressResults" hidden><legend>Chọn đúng địa chỉ nhận hàng</legend><div></div></fieldset>
+              <p class="address-attribution">Tra cứu bằng <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> / Nominatim. Địa chỉ chưa có số nhà trên bản đồ cần kiểm tra lại trước khi đặt giao hàng.</p>
+            </div>
             <label for="checkoutNote">Ghi chú (không bắt buộc)</label><textarea id="checkoutNote" name="note" maxlength="500" rows="2" placeholder="Lời nhắn cho nhà thuốc..."></textarea>
             <div class="checkout-summary" aria-live="polite"><div><span>Tạm tính <small id="checkoutItemCount">(0 sản phẩm)</small></span><strong id="checkoutSubtotal">0 ₫</strong></div><div><span>Phí giao hàng</span><strong id="checkoutShipping">0 ₫</strong></div><div class="checkout-total"><span>Tổng thanh toán</span><strong id="checkoutTotal">0 ₫</strong></div><p id="checkoutPaymentNote">Thanh toán tại nhà thuốc khi nhận hàng.</p></div>
           </section>
         </div>
         <p id="checkoutError" class="checkout-error" role="alert"></p>
-        <div class="shop-dialog-footer"><span>Sau khi đặt, chọn nhận hoặc không nhận hóa đơn để xác nhận giao dịch demo.</span><button class="primary" id="confirmCheckout" type="submit" disabled>Đặt hàng demo <span aria-hidden="true">→</span></button></div>
+        <div class="shop-dialog-footer"><span>Bạn sẽ kiểm tra lại thuốc, địa chỉ và tổng tiền trước khi xác nhận đặt hàng.</span><button class="primary" id="confirmCheckout" type="submit" disabled>Kiểm tra đơn hàng <span aria-hidden="true">→</span></button></div>
       </form>
+    </dialog>
+
+    <dialog class="shop-dialog review-dialog" id="checkoutReviewDialog" aria-labelledby="checkoutReviewTitle">
+      <div class="shop-dialog-heading"><div><p class="tag">KIỂM TRA TRƯỚC KHI ĐẶT</p><h2 id="checkoutReviewTitle">Kiểm tra lại đơn hàng</h2><p>Kiểm tra danh sách thuốc, thông tin nhận hàng và số tiền cần trả.</p></div><button class="dialog-close" type="button" data-close-dialog aria-label="Quay lại giỏ hàng">×</button></div>
+      <div id="checkoutReviewContent"></div>
+      <p class="checkout-error" id="checkoutReviewError" role="alert"></p>
+      <div class="shop-dialog-footer"><span>Thanh toán trực tiếp khi nhận hàng. Đơn chỉ được lưu sau khi bạn xác nhận.</span><button class="outline-button" id="backToCheckout" type="button">Quay lại chọn thuốc</button><button class="primary" id="placeReviewedOrder" type="button">Xác nhận đặt hàng</button></div>
     </dialog>
 
     <dialog class="shop-dialog invoice-dialog" id="invoiceDialog" aria-labelledby="invoiceTitle">
