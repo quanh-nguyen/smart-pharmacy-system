@@ -80,6 +80,15 @@
 .invoice-top h3 { margin: 0 0 8px; font-size: 20px; color: #17345f; }
 .invoice-sheet p { margin: 5px 0; font-size: 12px; line-height: 1.7; color: #526781; overflow-wrap: anywhere; }
 .invoice-status { display: inline-block; margin-top: 6px; padding: 5px 9px; border-radius: 5px; background: #fff4df; color: #97620f; font-size: 11px; font-weight: 600; }
+.invoice-status.is-confirmed { background: #e5f6ed; color: #157347; }
+.invoice-action-status { margin: 0 28px 18px; color: #476387; font-size: 12px; line-height: 1.7; }
+.invoice-action-status:empty { display: none; }
+.invoice-dialog .shop-dialog-footer { flex-wrap: wrap; }
+#declineInvoice { margin-right: auto; }
+#declineInvoice[hidden] { display: none; }
+.checkout-feedback { position: fixed; bottom: 24px; left: 24px; z-index: 1000; display: flex; align-items: center; gap: 16px; max-width: min(460px, calc(100% - 48px)); padding: 16px 18px; border: 1px solid #a6d6bd; border-radius: 12px; background: #edf9f2; box-shadow: 0 8px 30px #17345f26; color: #176540; font-size: 13px; line-height: 1.7; }
+.checkout-feedback[hidden] { display: none; }
+.checkout-feedback button { flex-shrink: 0; border: 0; background: transparent; color: inherit; font-size: 24px; }
 .invoice-customer { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
 .invoice-customer h4 { margin: 0 0 7px; color: #17345f; font-size: 12px; }
 .invoice-table-wrap { overflow-x: auto; }
