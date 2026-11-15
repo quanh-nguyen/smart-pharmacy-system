@@ -236,3 +236,123 @@ test('agreement between independent readings outweighs one conflicting higher-co
   assert.equal(items[0].strength,'10mg');
   assert.equal(items[0].needsReview,true);
 });
+
+test('document numbers, addresses, clinic hours and OCR headings are excluded before medicine selection', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  const items = parsePrescriptionMedicines(`1. LL SỞ Y TẾ TP.HỒ CHÍ MINH SỐ hồ sơ: 70180.140717744 955
+2. PON THUOC
+1. YESOM 40 40mg
+2. SUCRATE GEL (Sucralfate 1g)
+3. ARTHUR (Trimebutine 200)
+4. PAPAZE (magnesi aluminometasilicate)
+5. BIOCID MH 3.5g + 2g
+6. DIGLUMISAN (L-Arginine Hydrochloride 1000mg)
+78 Đường Giải Phóng, Phương Mai, Đống Đa, Hà Nội
+7. no 78 Đường Giải Phóng
+8. Đường Giải Phóng
+9. đến thứ 6
+10. Thứ 7
+11. Chủ nhật (từ 7h30 đến 16h30)
+12. Hotline: 0901234567
+13. Số thẻ BHYT: 123456789012
+14. Người bệnh: Nguyễn Văn A
+15. Tái khám sau 30 ngày
+76 Đ. Giải Phóng, P. Phương Mai, Q. Đống Đa
+16. TP. Hồ Chí Minh
+17. Đ/C: 78 Giải Phóng`);
+  assert.deepEqual(items.map(item => item.name.split(/[ (]/)[0]), ['YESOM', 'SUCRATE', 'ARTHUR', 'PAPAZE', 'BIOCID', 'DIGLUMISAN']);
+  assert.equal(items[1].strength, '1g');
+  assert.equal(items[4].strength, '3.5g+2g');
+  assert.equal(items[5].strength, '1000mg');
+});
+
+test('isolated OCR symbols, numeric codes and damaged text do not become medicines', async () => {
+  const { selectPrescriptionReadings } = await parser;
+  const items = selectPrescriptionReadings([{lines:[
+    {text:'1. Etoricoxib(Roticox 90mg)',confidence:94},
+    {text:'2. Pregabalin(Lyrica 75mg)',confidence:94},
+    {text:'3. Lansoprazole 30mg',confidence:94},
+    {text:'9. 8888.66 dễ dược hi',confidence:80},
+    {text:'α =. 10g',confidence:50},
+    {text:'8. n¤',confidence:65},
+    {text:'. mg)(Viartril- S 1500mg',confidence:55},
+    {text:'Mecobalamin ĐO CTGUN in Nhi co hả min CD SG! 1500mcg',confidence:55},
+    {text:'Cophemccongdin NỎ TƯ NgU 2g',confidence:45,words:[
+      {text:'Cophemccongdin',confidence:22},{text:'NỎ',confidence:12},{text:'TƯ',confidence:20},{text:'NgU',confidence:18},
+    ]},
+  ]}]);
+  assert.deepEqual(items.map(item => item.name), ['Etoricoxib (Roticox)', 'Pregabalin (Lyrica)', 'Lansoprazole']);
+});
+
+test('a damaged row prefix is cleaned while its medicine and exact strength survive', async () => {
+  const { selectPrescriptionReadings } = await parser;
+  const items = selectPrescriptionReadings([
+    {text:'đề \\2. SUCRATE GEL (Sucralfate 1g)',confidence:86},
+    {text:'2. SUCRATE GEL (Sucralfate 1g)',confidence:94},
+  ]);
+  assert.equal(items.length,1);
+  assert.equal(items[0].name,'SUCRATE GEL (Sucralfate)');
+  assert.equal(items[0].strength,'1g');
+});
+
+test('formatting variants and repeated ingredient notes are merged without merging strengths or release forms', async () => {
+  const { selectPrescriptionReadings } = await parser;
+  const items = selectPrescriptionReadings([
+    {text:'1. Mecobalamin (methylcobalamin) 1500mcg\n2. Metformin (SR) 500mg\n3. Metformin 500mg\n4. Mecobalamin 500mcg',confidence:94},
+    {text:'Mecobalamin(methylcobalamin)(Methylcobalamin Capsules 1500mcg)\nMetformin (SR) 500mg\nMetformin 500mg\nMecobalamin 500mcg',confidence:91},
+  ]);
+  assert.equal(items.length,4);
+  assert.equal(items.filter(item=>item.strength==='1500mcg').length,1);
+  assert.equal(items.filter(item=>item.name.startsWith('Metformin')).length,2);
+  assert.equal(items.filter(item=>item.name==='Mecobalamin' && item.strength==='500mcg').length,1);
+});
+
+test('unknown medicine names and traditional medicines survive document filtering', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('1. Newbrand XR 25mg\n2. Hoạt huyết dưỡng não\n3. Metformin (SR) 500mg\n4. 5-HTP 100mg\n5. 5-FU 50mg\n6. Huyết áp Vương 500mg\n7. Đường Glucose 5%'),[
+    {name:'Newbrand XR',strength:'25mg'}, {name:'Hoạt huyết dưỡng não',strength:''},
+    {name:'Metformin (SR)',strength:'500mg'}, {name:'5-HTP',strength:'100mg'}, {name:'5-FU',strength:'50mg'},
+    {name:'Huyết áp Vương',strength:'500mg'}, {name:'Đường Glucose',strength:'5%'},
+  ]);
+});
+
+test('ingredient commas remain inside one medicine while user-entered separators still work', async () => {
+  const { parseMedicineList } = await parser;
+  assert.deepEqual(parseMedicineList('Calcium (citrate, carbonate) 500mg, Vitamin C 0,5g; Loratadine 10mg'),[
+    {name:'Calcium (citrate, carbonate)',strength:'500mg'}, {name:'Vitamin C',strength:'0.5g'}, {name:'Loratadine',strength:'10mg'},
+  ]);
+});
+
+test('different parenthetical ingredients and brands remain separate medicines', async () => {
+  const { selectPrescriptionReadings } = await parser;
+  const items = selectPrescriptionReadings([
+    {text:'1. Calcium (citrate) 500mg\n2. Calcium (citrate + carbonate) 500mg\n3. Etoricoxib (Roticox) 90mg\n4. Etoricoxib (Arcoxia) 90mg',confidence:94},
+    {text:'Calcium (citrate) 500mg\nCalcium (citrate + carbonate) 500mg\nEtoricoxib (Roticox) 90mg\nEtoricoxib (Arcoxia) 90mg',confidence:91},
+  ]);
+  assert.equal(items.length,4);
+});
+
+test('a medicine fused onto a document field is recovered before document filtering', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('Số hồ sơ: 70180   1. Paracetamol 500mg\n2. Vitamin C 500mg   3. Hotline: 0901234567'),[
+    {name:'Paracetamol',strength:'500mg'},{name:'Vitamin C',strength:'500mg'},
+  ]);
+});
+
+test('tidied OCR parentheses still match stock without substituting brands or release forms', async () => {
+  const { matchesMedicine } = await parser;
+  const requested = {name:'Etoricoxib (Roticox)',strength:'90mg'};
+  assert.equal(matchesMedicine(requested,{name:'Etoricoxib(Roticox 90mg)'}),true);
+  assert.equal(matchesMedicine(requested,{name:'Etoricoxib (Arcoxia) 90mg'}),false);
+  assert.equal(matchesMedicine({name:'Metformin (SR)',strength:'500mg'},{name:'Metformin 500mg'}),false);
+});
+
+test('noisy composition descriptions are removed without inventing a missing compound unit', async () => {
+  const { selectPrescriptionReadings } = await parser;
+  const items=selectPrescriptionReadings([{text:'1. Glucosamin (dưới dạng Cry: mg)(Viartril- S 1500mg)\n2. BIOCID MH 3.5+ 2g',confidence:95}]);
+  assert.equal(items[0].name,'Glucosamin (Viartril- S)');
+  assert.equal(items[0].strength,'1500mg');
+  assert.equal(items[1].name,'BIOCID MH 3.5+');
+  assert.equal(items[1].strength,'2g');
+  assert.equal(items[1].needsReview,true);
+});
