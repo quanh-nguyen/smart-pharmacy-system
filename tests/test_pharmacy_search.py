@@ -771,6 +771,32 @@ window.Tesseract = {createWorker: async () => ({
         expect(self.page.locator('#prescriptionButton')).to_be_disabled()
         expect(self.page.locator('#prescriptionRawDetails')).to_be_visible()
 
+    def test_date_signature_and_prose_are_removed_before_display_and_stock_search(self):
+        labels=['Clealine 50mg','Ozapex 5mg','Devodil 50mg','Grandaxin 50mg','Ganlotus','Pengatin']
+        self.ocr_text='\n'.join(f'{index+1}. {label}' for index,label in enumerate(labels))+'\n7. Eres ơi b5G\n8. Hồ Nội, Ngày 09 Thing 10 Nom 2021'
+        self.page.evaluate("""labels=>localStorage.setItem('smartPharmacyOwnerData',JSON.stringify({full:{
+            pharmacy:{name:'Nhà thuốc đủ 6 thuốc',address:'Hà Nội',latitude:21.029,longitude:105.834},
+            medicines:labels.map(name=>({name,quantity:10}))
+        }}))""",labels)
+        self.upload_prescription()
+        expect(self.page.locator('#medicineInput')).to_have_value('\n'.join(labels))
+        expect(self.page.locator('#prescriptionMedicines li')).to_have_text(labels)
+        expect(self.page.locator('#prescriptionRawDetails')).not_to_have_attribute('open','')
+        self.page.locator('#prescriptionRawDetails summary').click()
+        self.assertIn('Hồ Nội, Ngày 09 Thing 10 Nom 2021',self.page.locator('#prescriptionRawText').input_value())
+        self.page.locator('#confirmPrescriptionMedicines').check()
+        self.page.locator('#prescriptionButton').click()
+        self.completed(1)
+        expect(self.page.locator('#pharmacyList h3')).to_have_text('Nhà thuốc đủ 6 thuốc')
+
+    def test_city_and_date_only_ocr_does_not_enable_medicine_search(self):
+        self.ocr_text='1. Hồ Nội, Ngày 09 Thing 10 Nom 2021\n2. Eres oi b5G'
+        self.upload_prescription()
+        expect(self.page.locator('#prescriptionOcrStatus')).to_have_attribute('data-state','error')
+        expect(self.page.locator('#medicineInput')).to_have_value('')
+        expect(self.page.locator('#prescriptionMedicines li')).to_have_count(0)
+        expect(self.page.locator('#prescriptionButton')).to_be_disabled()
+
     def test_printed_prescription_layouts_are_filtered_without_losing_kdnt_medicines(self):
         fixtures=json.loads((ROOT.parent/'tests/fixtures/printed-prescription-layouts.json').read_text())
         for fixture in fixtures:
@@ -900,10 +926,10 @@ window.Tesseract = {createWorker: async () => ({
             "Paracetamol 500mg", "Loratadine 10mg", "Vitamin C 500mg"], timeout=90000)
         expect(self.page.locator("#prescriptionButton")).to_be_disabled()
 
-    def printed_ocr_sample(self, labels, difficult=False, document_noise=False):
+    def printed_ocr_sample(self, labels, difficult=False, document_noise=False, signature_noise=False):
         self.real_ocr = True
         self.page.locator('[data-tab="prescription"]').click()
-        image = self.page.evaluate("""({labels,difficult,document_noise}) => {
+        image = self.page.evaluate("""({labels,difficult,document_noise,signature_noise}) => {
             const paper=document.createElement('canvas');paper.width=1400;paper.height=2000;
             const ctx=paper.getContext('2d');
             const shadow=ctx.createLinearGradient(0,0,1400,0);
@@ -923,6 +949,10 @@ window.Tesseract = {createWorker: async () => ({
                  'Thứ 2 đến thứ 6', 'Thứ 7', 'Chủ nhật (từ 7h30 đến 16h30)',
                  'Hotline: 0901234567'].forEach((line,index)=>ctx.fillText(line,75,1450+index*55));
             }
+            if(signature_noise){
+                ctx.font='24px Arial';ctx.fillText('7. Eres ơi b5G',75,1450);
+                ctx.fillText('Hồ Nội, Ngày 09 Thing 10 Nom 2021',75,1510);
+            }
             ctx.font='23px Arial';ctx.fillText('Ngày 15 tháng 11 năm 2026',850,1820);
             ctx.fillText('Bác sĩ kê đơn',1000,1880);
             if(!difficult)return paper.toDataURL('image/png').split(',')[1];
@@ -930,7 +960,7 @@ window.Tesseract = {createWorker: async () => ({
             const photoCtx=photo.getContext('2d');photoCtx.fillStyle='#777777';photoCtx.fillRect(0,0,1520,2100);
             photoCtx.translate(90,20);photoCtx.rotate(2.3*Math.PI/180);photoCtx.filter='blur(0.65px)';photoCtx.drawImage(paper,0,0);
             return photo.toDataURL('image/jpeg',0.70).split(',')[1];
-        }""", {'labels':labels,'difficult':difficult,'document_noise':document_noise})
+        }""", {'labels':labels,'difficult':difficult,'document_noise':document_noise,'signature_noise':signature_noise})
         self.page.locator('#prescriptionFile').set_input_files({'name':'printed-shadow.jpg' if difficult else 'printed-list.png',
             'mimeType':'image/jpeg' if difficult else 'image/png','buffer':base64.b64decode(image)})
         self.page.wait_for_function("document.querySelector('#prescriptionOcrStatus').dataset.state !== 'reading'",timeout=90000)
@@ -954,6 +984,10 @@ window.Tesseract = {createWorker: async () => ({
     def test_real_ocr_filters_clinic_address_and_hours_from_a_printed_image(self):
         self.printed_ocr_sample(['Paracetamol 500mg','Loratadine 10mg','Cetirizine 10mg','Metformin 500mg',
             'Omeprazole 20mg','Vitamin C 500mg'],document_noise=True)
+
+    @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
+    def test_real_ocr_excludes_signature_date_and_prose_but_keeps_name_only_medicines(self):
+        self.printed_ocr_sample(['Clealine 50mg','Ozapex 5mg','Devodil 50mg','Grandaxin 50mg','Ganlotus','Pengatin'],signature_noise=True)
 
     @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
     def test_real_ocr_reads_recreated_numbered_and_kdnt_printed_layouts(self):
