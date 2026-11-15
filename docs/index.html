@@ -363,14 +363,18 @@
             <label for="checkoutFulfillment">Cách nhận hàng</label><select id="checkoutFulfillment" name="fulfillment"><option value="pickup">Nhận tại nhà thuốc · Miễn phí</option><option value="delivery">Giao tận nơi · 15.000 ₫ (demo)</option></select>
             <div id="checkoutAddressField" hidden>
               <label for="checkoutAddress">Địa chỉ giao hàng <span>*</span></label><textarea id="checkoutAddress" name="address" autocomplete="street-address" maxlength="500" rows="2" placeholder="Số nhà, tên đường, phường/xã, tỉnh/thành phố" aria-describedby="checkoutAddressHint checkoutAddressStatus checkoutAddressError" disabled></textarea>
-              <p class="address-hint" id="checkoutAddressHint">Địa chỉ sẽ được tự động kiểm tra khi bấm Kiểm tra đơn hàng. Tầng, căn hộ hoặc hướng dẫn giao hàng có thể ghi ở phần ghi chú.</p>
+              <p class="address-hint" id="checkoutAddressHint">Địa chỉ nhập tay sẽ được kiểm tra khi bấm Kiểm tra đơn hàng. Khi dùng định vị, giữ địa chỉ khu vực và bổ sung điểm nhận cụ thể ở ô bên dưới.</p>
               <button class="outline-button" id="useCurrentDeliveryLocation" type="button">Dùng vị trí hiện tại</button>
+              <a class="current-location-map" id="currentDeliveryMapLink" target="_blank" rel="noopener noreferrer" hidden>Xem vị trí định vị trên bản đồ ↗</a>
               <p class="address-status" id="checkoutAddressStatus" role="status"></p>
               <p class="address-error" id="checkoutAddressError" role="alert"></p>
+              <label for="checkoutDeliveryDetails">Số nhà, tòa nhà, tầng/căn hộ hoặc điểm nhận cụ thể <span id="deliveryDetailsRequired" hidden>*</span></label>
+              <input id="checkoutDeliveryDetails" name="deliveryDetails" maxlength="200" placeholder="Ví dụ: Tòa A2, tầng 3, căn hộ 302" aria-describedby="checkoutDeliveryDetailsHint" disabled>
+              <p class="address-hint" id="checkoutDeliveryDetailsHint">Bắt buộc bổ sung nếu định vị chỉ trả về khu vực. Thông tin này sẽ được lưu cùng địa chỉ giao hàng.</p>
               <fieldset class="address-results" id="checkoutAddressResults" hidden><legend>Chọn đúng địa chỉ nhận hàng</legend><div></div></fieldset>
               <div class="manual-address-confirmation" id="manualAddressConfirmation" hidden>
-                <p>Đã đối chiếu được đường/khu vực. Bản đồ chưa xác minh được số nhà, ngõ/ngách hoặc phường/xã bạn nhập.</p>
-                <label><input type="checkbox" id="confirmManualDeliveryAddress"><span>Tôi xác nhận số nhà, ngõ/ngách và địa chỉ giao hàng đã nhập là chính xác.</span></label>
+                <p id="manualAddressHint">Đã đối chiếu được đường/khu vực. Bản đồ chưa xác minh được số nhà, ngõ/ngách hoặc phường/xã bạn nhập.</p>
+                <label><input type="checkbox" id="confirmManualDeliveryAddress"><span id="manualAddressLabel">Tôi xác nhận số nhà, ngõ/ngách và địa chỉ giao hàng đã nhập là chính xác.</span></label>
               </div>
               <p class="address-attribution">Tra cứu bằng <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> / Nominatim. Nếu chỉ tìm thấy đường/khu vực, bạn có thể xác nhận phần địa chỉ chi tiết nhập thủ công.</p>
             </div>
