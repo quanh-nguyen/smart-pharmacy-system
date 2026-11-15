@@ -363,8 +363,8 @@
             <label for="checkoutFulfillment">Cách nhận hàng</label><select id="checkoutFulfillment" name="fulfillment"><option value="pickup">Nhận tại nhà thuốc · Miễn phí</option><option value="delivery">Giao tận nơi · 15.000 ₫ (demo)</option></select>
             <div id="checkoutAddressField" hidden>
               <label for="checkoutAddress">Địa chỉ giao hàng <span>*</span></label><textarea id="checkoutAddress" name="address" autocomplete="street-address" maxlength="500" rows="2" placeholder="Số nhà, tên đường, phường/xã, tỉnh/thành phố" aria-describedby="checkoutAddressHint checkoutAddressStatus checkoutAddressError" disabled></textarea>
-              <p class="address-hint" id="checkoutAddressHint">Nhập địa chỉ rồi kiểm tra và chọn đúng kết quả trên bản đồ. Tầng, căn hộ hoặc hướng dẫn giao hàng có thể ghi ở phần ghi chú.</p>
-              <button class="outline-button" id="verifyDeliveryAddress" type="button">Kiểm tra địa chỉ</button>
+              <p class="address-hint" id="checkoutAddressHint">Địa chỉ sẽ được tự động kiểm tra khi bấm Kiểm tra đơn hàng. Tầng, căn hộ hoặc hướng dẫn giao hàng có thể ghi ở phần ghi chú.</p>
+              <button class="outline-button" id="useCurrentDeliveryLocation" type="button">Dùng vị trí hiện tại</button>
               <p class="address-status" id="checkoutAddressStatus" role="status"></p>
               <p class="address-error" id="checkoutAddressError" role="alert"></p>
               <fieldset class="address-results" id="checkoutAddressResults" hidden><legend>Chọn đúng địa chỉ nhận hàng</legend><div></div></fieldset>
