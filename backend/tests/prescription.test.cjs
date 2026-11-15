@@ -447,3 +447,91 @@ test('medicine-section bounds from a full reading also exclude sparse footer fra
   ]);
   assert.deepEqual(items.map(medicineLabel),['Althax 120mg']);
 });
+
+test('OCR date signatures and prose fragments do not become extra medicines', async () => {
+  const { selectPrescriptionReadings, medicineLabel, parseMedicineList } = await parser;
+  const text=`1. Clealine 50mg
+2. Ozapex 5mg
+3. Devodil 50mg
+4. Grandaxin 50mg
+5. Ganlotus
+6. Pengatin
+7. Eres ơi b5G
+8. Hồ Nội, Ngày 09 Thing 10 Nom 2021`;
+  const medicines=selectPrescriptionReadings([{text,confidence:94}]);
+  const labels=medicines.map(medicineLabel);
+  assert.deepEqual(labels,['Clealine 50mg','Ozapex 5mg','Devodil 50mg','Grandaxin 50mg','Ganlotus','Pengatin']);
+  assert.deepEqual(parseMedicineList(labels.join('\n')).map(medicineLabel),labels);
+});
+
+test('signature dates with damaged month/year labels are excluded without a place-name blacklist', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  for (const footer of ['Hồ Nội, Ngày 09 Thing 10 Nom 2021','Đà Nẵng, ngày 09 tháng 10 năm 2021',
+    '09 Thing 10 Nom 2021','Ngày09Thing10Nom2021','09/10/2021','2021-10-09','9. Thành phố khác, ngày 09 thàng 10 nãm 2021']) {
+    assert.deepEqual(parsePrescriptionMedicines(footer),[],footer);
+  }
+});
+
+test('a footer found in one reading also removes isolated city/date fragments in other readings', async () => {
+  const { selectPrescriptionReadings, medicineLabel } = await parser;
+  const line=(text,y)=>({text,confidence:94,bbox:{x0:20,y0:y,x1:600,y1:y+20}});
+  const items=selectPrescriptionReadings([
+    {lines:[line('1. Grandaxin 50mg',100),line('2. Ganlotus',160),line('3. Pengatin',220),line('Hồ Nội, Ngày 09 Thing 10 Nom 2021',350)]},
+    {lines:[line('1. Grandaxin 50mg',100),line('2. Ganlotus',160),line('3. Pengatin',220),line('7. Hồ Nội',350),line('8. Ngày 09 Thing 10 Nom 2021',380)]},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Grandaxin 50mg','Ganlotus','Pengatin']);
+  const nameOnly=selectPrescriptionReadings([
+    {lines:[line('1. Ganlotus',100),line('2. Pengatin',160),line('Hồ Nội, Ngày 09 Thing 10 Nom 2021',350)]},
+    {lines:[line('1. Ganlotus',100),line('2. Pengatin',160),line('9. Chữ cuối trang 5g',400)]},
+  ]);
+  assert.deepEqual(nameOnly.map(medicineLabel),['Ganlotus','Pengatin']);
+});
+
+test('text-only readings use the same-image date signature to exclude a detached place fragment', async () => {
+  const { selectPrescriptionReadings, medicineLabel } = await parser;
+  const items=selectPrescriptionReadings([
+    {text:'1. Ganlotus\n2. Pengatin\nHồ Nội, Ngày 09 Thing 10 Nom 2021',confidence:94},
+    {text:'1. Ganlotus\n2. Pengatin\n8. Hồ Nội',confidence:93},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Ganlotus','Pengatin']);
+});
+
+test('document dates fused onto a medicine line preserve the medicine before the footer', async () => {
+  const { parsePrescriptionMedicines, selectPrescriptionReadings, medicineLabel } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('1. Grandaxin 50mg   Hồ Nội, Ngày 09 Thing 10 Nom 2021'),[{name:'Grandaxin',strength:'50mg'}]);
+  assert.deepEqual(parsePrescriptionMedicines('1. Pengatin   Hồ Nội, Ngày 09 Thing 10 Nom 2021'),[{name:'Pengatin',strength:''}]);
+  const items=selectPrescriptionReadings([
+    {text:'1. Pengatin   Hồ Nội, Ngày 09 Thing 10 Nom 2021',confidence:94},
+    {text:'1. Pengatin\n8. Hồ Nội',confidence:93},
+  ]);
+  assert.deepEqual(items.map(medicineLabel),['Pengatin']);
+});
+
+test('medicine names, concentrations and treatment dates do not truncate later medicines', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('1. Vitamin D3 1000IU\nNgày 09/10/2021 bắt đầu uống theo hướng dẫn\n2. Vitamin B12 500mcg\n3. Newbrand 5mg + 10mg\n4. Hoạt huyết dưỡng não'),[
+    {name:'Vitamin D3',strength:'1000IU'},{name:'Vitamin B12',strength:'500mcg'},
+    {name:'Newbrand',strength:'5mg+10mg'},{name:'Hoạt huyết dưỡng não',strength:''},
+  ]);
+});
+
+test('dates above the first medicine and a structured multiline OCR record preserve medicine rows', async () => {
+  const { parsePrescriptionMedicines, selectPrescriptionReadings, medicineLabel } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('Thuốc điều trị:\nNgày 09 tháng 10 năm 2021\n1. Ganlotus\n2. Pengatin').map(medicineLabel),['Ganlotus','Pengatin']);
+  const items=selectPrescriptionReadings([{lines:[{text:'1. Ganlotus\n2. Pengatin\nHồ Nội, Ngày 09 Thing 10 Nom 2021',confidence:94,bbox:{x0:20,y0:100,x1:600,y1:400}}]}]);
+  assert.deepEqual(items.map(medicineLabel),['Ganlotus','Pengatin']);
+});
+
+test('a deaccented interjection plus a damaged amount is prose, while names and vitamin codes survive', async () => {
+  const { parsePrescriptionMedicines, medicineLabel } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('1. Eres oi b5G\n2. Newbrand OI 10mg\n3. Oil B5 5g\n4. Vitamin B12 500mcg').map(medicineLabel),[
+    'Newbrand OI 10mg','Oil B5 5g','Vitamin B12 500mcg',
+  ]);
+});
+
+test('advice appended after the amount does not remove the actual medicine', async () => {
+  const { parsePrescriptionMedicines } = await parser;
+  assert.deepEqual(parsePrescriptionMedicines('1. Vitamin C 500mg (không dùng thuốc này khi chưa hỏi bác sĩ)\n2. Grandaxin 50mg Không được tự tăng liều'),[
+    {name:'Vitamin C',strength:'500mg'},{name:'Grandaxin',strength:'50mg'},
+  ]);
+});
