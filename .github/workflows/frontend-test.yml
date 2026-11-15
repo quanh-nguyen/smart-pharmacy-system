@@ -1,0 +1,29 @@
+name: Frontend and real OCR
+on:
+  push:
+    paths: ['docs/**', 'tests/**', 'scripts/prepare-ocr-test-assets.py', 'backend/tests/prescription.test.cjs', 'backend/tests/api-client.test.cjs', '.github/workflows/frontend-tests.yml']
+  pull_request:
+    paths: ['docs/**', 'tests/**', 'scripts/prepare-ocr-test-assets.py', 'backend/tests/prescription.test.cjs', 'backend/tests/api-client.test.cjs', '.github/workflows/frontend-tests.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRESCRIPTION_OCR_ASSET_DIR: /tmp/smart-pharmacy-ocr-assets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install playwright==1.62.0
+      - run: python -m playwright install --with-deps chromium
+      - run: npm pack leaflet@1.9.4 --pack-destination /tmp
+      - run: python scripts/prepare-ocr-test-assets.py
+      - run: node --test backend/tests/api-client.test.cjs backend/tests/prescription.test.cjs
+      - run: python -m unittest discover -s tests -v
