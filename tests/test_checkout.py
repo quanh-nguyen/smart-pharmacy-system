@@ -21,6 +21,12 @@ DELIVERY_ADDRESS = {
     "display_name": "1, Tràng Tiền, phường Tràng Tiền, Hà Nội, Việt Nam",
     "address": {"house_number": "1", "road": "Tràng Tiền", "city": "Hà Nội", "country_code": "vn"},
 }
+MANUAL_ADDRESS = '42 Đ. Lĩnh Nam, Vĩnh Tuy, Hà Nội, Việt Nam'
+STREET_ADDRESS = {
+    'osm_id': 2042, 'osm_type': 'way', 'lat': '20.998', 'lon': '105.870', 'addresstype': 'road',
+    'display_name': 'Đường Lĩnh Nam, Vĩnh Hưng, Hà Nội, Việt Nam',
+    'address': {'road': 'Đường Lĩnh Nam', 'city': 'Hà Nội', 'country_code': 'vn'},
+}
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -264,6 +270,135 @@ class CheckoutTests(unittest.TestCase):
         expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
         expect(self.page.locator('#checkoutAddress')).to_have_value('Tràng Tiền, Hà Nội')
         expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+
+    def manual_street_lookup(self, street=STREET_ADDRESS):
+        requests = []
+        def lookup(route):
+            query = parse_qs(urlsplit(route.request.url).query).get('q', [''])[0]
+            requests.append(query)
+            route.fulfill(json=[street] if query == 'Lĩnh Nam, Hà Nội' else [])
+        self.page.route('https://nominatim.openstreetmap.org/search**', lookup)
+        return requests
+
+    def test_manual_address_with_abbreviation_can_match_a_mapped_house(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.locator('#checkoutAddress').fill(MANUAL_ADDRESS)
+        complete = {**STREET_ADDRESS, 'display_name': '42, Đường Lĩnh Nam, Vĩnh Tuy, Hà Nội, Việt Nam',
+                    'address': {**STREET_ADDRESS['address'], 'house_number': '42'}}
+        requests = []
+        def lookup(route):
+            requests.append(parse_qs(urlsplit(route.request.url).query)['q'][0])
+            route.fulfill(json=[complete])
+        self.page.route('https://nominatim.openstreetmap.org/search**', lookup)
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        self.assertIn('đường Lĩnh Nam', requests[0])
+        expect(self.page.locator('#manualAddressConfirmation')).not_to_be_visible()
+        self.page.locator('#placeReviewedOrder').click()
+        self.assertTrue(self.state()['orders'][0]['deliveryLocation']['houseNumberVerified'])
+
+    def test_manual_house_confirmation_allows_a_matched_street_without_mapped_house(self):
+        self.page.set_viewport_size({'width': 390, 'height': 844})
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.locator('#checkoutAddress').fill(MANUAL_ADDRESS)
+        requests = self.manual_street_lookup()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#manualAddressConfirmation')).to_be_visible()
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[-1], 'Lĩnh Nam, Hà Nội')
+        expect(self.page.locator('#checkoutAddress')).to_have_value(MANUAL_ADDRESS)
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('xác nhận địa chỉ chi tiết')
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text(MANUAL_ADDRESS)
+        expect(self.page.locator('.review-manual')).to_contain_text('do bạn xác nhận')
+        expect(self.page.locator('.review-verified')).to_have_count(0)
+        self.page.locator('#placeReviewedOrder').click()
+        order = self.state()['orders'][0]
+        self.assertEqual(order['address'], MANUAL_ADDRESS)
+        self.assertEqual(order['deliveryLocation']['precision'], 'street')
+        self.assertFalse(order['deliveryLocation']['houseNumberVerified'])
+        self.assertTrue(order['deliveryLocation']['manualConfirmed'])
+        self.assertTrue(order['deliveryLocation']['manualConfirmedAt'])
+        expect(self.page.locator('#invoiceContent')).to_contain_text('được khách hàng xác nhận')
+        self.assertEqual(order['paymentStatus'], 'Chưa thanh toán')
+
+    def test_manual_alley_address_preserves_house_and_alley_numbers(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.locator('#checkoutAddress').fill('123-45 Ng. 67 Đ. Lĩnh Nam')
+        requests = self.manual_street_lookup()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('bổ sung tỉnh/thành phố')
+        raw = '123-45 Ng. 67 Đ. Lĩnh Nam, Hà Nội'
+        self.page.locator('#checkoutAddress').fill(raw)
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#manualAddressConfirmation')).to_be_visible()
+        self.assertTrue(any('ngõ 67 đường Lĩnh Nam' in query for query in requests))
+        expect(self.page.locator('#checkoutAddress')).to_have_value(raw)
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#confirmCheckout').click()
+        self.page.locator('#placeReviewedOrder').click()
+        order = self.state()['orders'][0]
+        self.assertEqual(order['address'], raw)
+        self.assertEqual(order['deliveryLocation']['houseNumber'], '123-45')
+
+    def test_editing_manual_address_invalidates_its_confirmation(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.manual_street_lookup()
+        self.page.locator('#checkoutAddress').fill(MANUAL_ADDRESS)
+        self.page.locator('#confirmCheckout').click()
+        self.page.locator('#confirmManualDeliveryAddress').check()
+        self.page.locator('#checkoutAddress').fill('44, Đ. Lĩnh Nam, Vĩnh Tuy, Hà Nội, Việt Nam')
+        expect(self.page.locator('#manualAddressConfirmation')).not_to_be_visible()
+        expect(self.page.locator('#confirmManualDeliveryAddress')).not_to_be_checked()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#manualAddressConfirmation')).to_be_visible()
+        expect(self.page.locator('#confirmManualDeliveryAddress')).not_to_be_checked()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('xác nhận địa chỉ chi tiết')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+
+    def test_street_fallback_rejects_wrong_street_or_province(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        query_result = []
+        self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: route.fulfill(json=query_result))
+        for raw, result in [
+            ('22 Đ. Không Có Thật, Hà Nội', STREET_ADDRESS),
+            ('22 Đ. Lĩnh Nam, Hải Phòng', STREET_ADDRESS),
+            (MANUAL_ADDRESS, {**STREET_ADDRESS, 'display_name': '42, Đường Lĩnh Bắc, Vĩnh Tuy, Hà Nội, Việt Nam',
+                              'address': {**STREET_ADDRESS['address'], 'house_number': '42', 'road': 'Đường Lĩnh Bắc'}}),
+        ]:
+            with self.subTest(address=raw):
+                query_result[:] = [result]
+                self.page.locator('#checkoutAddress').fill(raw)
+                self.page.locator('#confirmCheckout').click()
+                expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
+                expect(self.page.locator('#manualAddressConfirmation')).not_to_be_visible()
+                expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+                self.assertIsNone(self.state())
+
+    def test_empty_cart_explains_disabled_review_instead_of_blaming_address(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.locator('#cartQuantity0').fill('0')
+        self.page.locator('#cartQuantity1').fill('0')
+        expect(self.page.locator('#confirmCheckout')).to_be_disabled()
+        expect(self.page.locator('#checkoutNextStepHint')).to_contain_text('Chưa chọn thuốc/sản phẩm')
+        self.page.locator('#cartQuantity0').fill('1')
+        expect(self.page.locator('#confirmCheckout')).to_be_enabled()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
         self.assertIsNone(self.state())
 
     def test_repeated_review_clicks_share_one_address_lookup(self):
