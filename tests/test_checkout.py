@@ -8,12 +8,19 @@ import shutil
 import tempfile
 import threading
 import unittest
+from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import sync_playwright, expect
 
 
 STORAGE_KEY = "smartPharmacyCheckout_v1"
 ROOT = Path(__file__).resolve().parents[1]
+DELIVERY_QUERY = "1 Tràng Tiền, Hà Nội"
+DELIVERY_ADDRESS = {
+    "place_id": 1001, "osm_id": 1001, "osm_type": "way", "lat": "21.024", "lon": "105.857",
+    "display_name": "1, Tràng Tiền, phường Tràng Tiền, Hà Nội, Việt Nam",
+    "address": {"house_number": "1", "road": "Tràng Tiền", "city": "Hà Nội", "country_code": "vn"},
+}
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -56,6 +63,9 @@ class CheckoutTests(unittest.TestCase):
                 route.fulfill(json={"version": 1, "datasets": []})
             elif route.request.url.startswith(self.base + "/"):
                 route.continue_()
+            elif route.request.url.startswith("https://nominatim.openstreetmap.org/search"):
+                query = parse_qs(urlsplit(route.request.url).query).get('q', [''])[0]
+                route.fulfill(json=[DELIVERY_ADDRESS] if query in {DELIVERY_QUERY, DELIVERY_ADDRESS['display_name']} else [])
             else:
                 route.abort()
         self.context.route("**/*", local_request)
@@ -77,6 +87,173 @@ class CheckoutTests(unittest.TestCase):
 
     def state(self):
         return self.page.evaluate("key => JSON.parse(localStorage.getItem(key))", STORAGE_KEY)
+
+    def verify_delivery_address(self, page=None):
+        page = page or self.page
+        page.locator('#verifyDeliveryAddress').click()
+        page.locator('#checkoutAddressResults input').first.check()
+        expect(page.locator('#checkoutAddressStatus')).to_contain_text('Đã chọn địa chỉ')
+
+    def place_order(self, page=None):
+        page = page or self.page
+        page.locator('#confirmCheckout').click()
+        expect(page.locator('#checkoutReviewDialog')).to_be_visible()
+        page.locator('#placeReviewedOrder').click()
+        expect(page.locator('#invoiceDialog')).to_be_visible()
+
+    def test_review_can_return_to_add_medicine_without_creating_an_order(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutNote').fill('Gọi trước khi giao')
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text('59.000 ₫')
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text('Gọi trước khi giao')
+        self.assertIsNone(self.state())
+        expect(self.page.locator('#invoiceDialog')).not_to_be_visible()
+        self.page.locator('#backToCheckout').click()
+        expect(self.page.locator('#checkoutDialog')).to_be_visible()
+        expect(self.page.locator('#cartQuantity0')).to_have_value('2')
+        expect(self.page.locator('#checkoutNote')).to_have_value('Gọi trước khi giao')
+        self.page.locator('#checkoutMedicineSearch').fill('khẩu trang')
+        self.page.locator('#cartQuantity2').fill('1')
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text('104.000 ₫')
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text('Khẩu trang y tế')
+        self.assertIsNone(self.state())
+        self.page.locator('#placeReviewedOrder').click()
+        expect(self.page.locator('#invoiceDialog')).to_be_visible()
+        order = self.state()['orders'][0]
+        self.assertEqual(order['total'], 104000)
+        self.assertEqual([item['quantity'] for item in order['items']], [2, 1, 1])
+        self.assertEqual(order['status'], 'Đã xác nhận · Demo')
+        self.assertEqual(order['paymentStatus'], 'Chưa thanh toán')
+
+    def test_escaping_review_returns_to_cart_without_changing_stock(self):
+        self.demo_checkout()
+        for close in ['escape', 'button']:
+            self.page.locator('#confirmCheckout').click()
+            expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+            if close == 'escape': self.page.keyboard.press('Escape')
+            else: self.page.locator('#checkoutReviewDialog [data-close-dialog]').click()
+            expect(self.page.locator('#checkoutDialog')).to_be_visible()
+            expect(self.page.locator('#cartQuantity1')).to_have_value('1')
+            self.assertIsNone(self.state())
+
+    def test_delivery_address_must_be_found_and_explicitly_selected(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.locator('#checkoutAddress').fill('99999 Đường Không Có Thật, Hà Nội')
+        self.page.locator('#verifyDeliveryAddress').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        expect(self.page.locator('#invoiceDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+        self.page.locator('#checkoutAddress').fill(DELIVERY_QUERY)
+        self.page.locator('#verifyDeliveryAddress').click()
+        expect(self.page.locator('#checkoutAddressResults input')).to_have_count(1)
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('chọn địa chỉ')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.page.locator('#checkoutAddressResults input').check()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).to_be_visible()
+        expect(self.page.locator('#checkoutReviewContent')).to_contain_text(DELIVERY_ADDRESS['display_name'])
+        expect(self.page.locator('.review-verified')).to_be_visible()
+        self.assertIsNone(self.state())
+        self.page.locator('#placeReviewedOrder').click()
+        order = self.state()['orders'][0]
+        self.assertEqual(order['address'], DELIVERY_ADDRESS['display_name'])
+        self.assertEqual(order['deliveryLocation']['houseNumber'], '1')
+        self.assertEqual(order['deliveryLocation']['latitude'], 21.024)
+        self.assertEqual(order['shipping'], 15000)
+
+    def test_geocoder_cannot_validate_a_city_street_or_different_house(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        responses = [
+            {**DELIVERY_ADDRESS, 'address': {'city': 'Hà Nội', 'country_code': 'vn'}},
+            {**DELIVERY_ADDRESS, 'address': {'road': 'Tràng Tiền', 'city': 'Hà Nội', 'country_code': 'vn'}},
+            {**DELIVERY_ADDRESS, 'display_name': '2, Tràng Tiền, Hà Nội, Việt Nam',
+             'address': {**DELIVERY_ADDRESS['address'], 'house_number': '2'}},
+            {**DELIVERY_ADDRESS, 'address': {**DELIVERY_ADDRESS['address'], 'country_code': 'us'}},
+        ]
+        pending_response = []
+        self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: route.fulfill(json=pending_response))
+        for index, result in enumerate(responses):
+            with self.subTest(index=index):
+                # A unique extra locality avoids caching a previous negative lookup.
+                query = f'1 Tràng Tiền, Hà Nội, khu {index}'
+                pending_response[:] = [{**result, 'display_name': result['display_name'] + f', khu {index}'}]
+                self.page.locator('#checkoutAddress').fill(query)
+                self.page.locator('#verifyDeliveryAddress').click()
+                expect(self.page.locator('#checkoutAddressError')).to_contain_text('Không tìm thấy')
+                expect(self.page.locator('#checkoutAddressResults')).not_to_be_visible()
+                self.assertIsNone(self.state())
+
+    def test_editing_a_selected_delivery_address_requires_verification_again(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.verify_delivery_address()
+        self.page.locator('#confirmCheckout').click()
+        self.page.locator('#backToCheckout').click()
+        expect(self.page.locator('#checkoutAddressStatus')).to_contain_text('Đã chọn địa chỉ')
+        self.page.locator('#checkoutAddress').fill('1 Đường Không Có Thật, Hà Nội')
+        expect(self.page.locator('#checkoutAddressResults')).not_to_be_visible()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('kiểm tra và chọn')
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+        self.page.locator('#checkoutFulfillment').select_option('pickup')
+        self.place_order()
+        self.assertIsNone(self.state()['orders'][0]['deliveryLocation'])
+        self.assertEqual(self.state()['orders'][0]['shipping'], 0)
+
+    def test_address_service_failure_blocks_delivery_and_can_be_retried(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: route.fulfill(status=503, json={}))
+        self.page.locator('#verifyDeliveryAddress').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('Chưa kết nối được')
+        expect(self.page.locator('#verifyDeliveryAddress')).to_be_enabled()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutReviewDialog')).not_to_be_visible()
+        self.assertIsNone(self.state())
+        self.page.unroute('https://nominatim.openstreetmap.org/search**')
+        self.verify_delivery_address()
+        self.place_order()
+        expect(self.page.locator('#invoiceContent')).to_contain_text(DELIVERY_ADDRESS['display_name'])
+
+    def test_late_address_result_cannot_verify_a_changed_address(self):
+        self.demo_checkout()
+        self.page.locator('#checkoutFulfillment').select_option('delivery')
+        pending = []
+        self.page.route('https://nominatim.openstreetmap.org/search**', lambda route: pending.append(route))
+        with self.page.expect_request('https://nominatim.openstreetmap.org/search**'):
+            self.page.locator('#verifyDeliveryAddress').click()
+        self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(resolve))')
+        self.assertTrue(pending)
+        self.page.locator('#checkoutAddress').fill('888 Địa Chỉ Khác, Hà Nội')
+        pending[0].fulfill(json=[DELIVERY_ADDRESS])
+        expect(self.page.locator('#checkoutAddressStatus')).to_be_empty()
+        expect(self.page.locator('#checkoutAddressResults')).not_to_be_visible()
+        self.page.locator('#confirmCheckout').click()
+        expect(self.page.locator('#checkoutAddressError')).to_contain_text('kiểm tra và chọn')
+        self.assertIsNone(self.state())
+
+    def test_stock_is_rechecked_after_the_customer_has_opened_review(self):
+        self.demo_checkout()
+        self.page.locator('#cartQuantity0').fill('29')
+        self.page.locator('#confirmCheckout').click()
+        other = self.context.new_page()
+        other.goto(self.base)
+        self.demo_checkout(other)
+        self.place_order(other)
+        self.page.locator('#placeReviewedOrder').click()
+        expect(self.page.locator('#checkoutReviewError')).to_contain_text('không đủ tồn kho')
+        expect(self.page.locator('#invoiceDialog')).not_to_be_visible()
+        self.assertEqual(len(self.state()['orders']), 1)
+        self.assertEqual(self.state()['inventories']['demo-an-tam'][0]['stock'], 28)
 
     def test_medicine_search_preserves_selected_items_and_does_not_submit_on_enter(self):
         self.demo_checkout()
@@ -108,7 +285,7 @@ class CheckoutTests(unittest.TestCase):
         expect(products).to_have_count(1)
         expect(products.locator("input")).to_be_disabled()
         search.fill("VITAMIN")
-        self.page.locator("#confirmCheckout").click()
+        self.place_order()
         expect(self.page.locator("#invoiceContent")).to_contain_text("71.000 ₫")
         self.assertEqual([item["quantity"] for item in self.state()["orders"][0]["items"]], [3, 1])
 
@@ -142,7 +319,8 @@ class CheckoutTests(unittest.TestCase):
         unsafe_name = '<img src=x onerror="window.xss=1">'
         self.page.locator("#checkoutName").fill(unsafe_name)
         self.page.locator("#checkoutNote").fill("<script>window.xss=2</script>")
-        self.page.locator("#confirmCheckout").click()
+        self.verify_delivery_address()
+        self.place_order()
         expect(self.page.locator("#invoiceDialog")).to_be_visible()
         expect(self.page.locator("#invoiceContent")).to_contain_text("74.000 ₫")
         expect(self.page.locator("#invoiceContent")).to_contain_text(unsafe_name)
@@ -204,7 +382,7 @@ class CheckoutTests(unittest.TestCase):
         downloads = []
         self.page.on("download", lambda download: downloads.append(download))
         self.demo_checkout()
-        self.page.locator("#confirmCheckout").click()
+        self.place_order()
         original = self.state()
         self.page.locator("#declineInvoice").click()
         expect(self.page.locator("#invoiceDialog")).not_to_be_visible()
@@ -230,7 +408,8 @@ class CheckoutTests(unittest.TestCase):
     def test_print_confirms_cod_order_before_opening_print_dialog(self):
         self.demo_checkout()
         self.page.locator("#checkoutFulfillment").select_option("delivery")
-        self.page.locator("#confirmCheckout").click()
+        self.verify_delivery_address()
+        self.place_order()
         self.page.evaluate("""key => {
           window.print = () => {
             window.printedOrder = JSON.parse(localStorage.getItem(key)).orders[0];
@@ -245,9 +424,9 @@ class CheckoutTests(unittest.TestCase):
         self.assertIn("Đã xác nhận · Demo", self.page.evaluate("window.printedContent"))
         self.assertIn("Thanh toán trực tiếp khi nhận hàng (COD)", self.page.evaluate("window.printedContent"))
 
-    def test_invoice_confirmation_storage_failure_does_not_claim_success(self):
+    def test_invoice_choice_storage_failure_does_not_claim_choice_was_saved(self):
         self.demo_checkout()
-        self.page.locator("#confirmCheckout").click()
+        self.place_order()
         original = self.state()
         downloads = []
         self.page.on("download", lambda download: downloads.append(download))
@@ -262,9 +441,9 @@ class CheckoutTests(unittest.TestCase):
         for action in ["downloadInvoice", "printInvoice", "declineInvoice"]:
             with self.subTest(action=action):
                 self.page.locator("#"+action).click()
-                expect(self.page.locator("#invoiceError")).to_contain_text("Chưa thể lưu xác nhận")
+                expect(self.page.locator("#invoiceError")).to_contain_text("Chưa thể lưu lựa chọn hóa đơn")
                 expect(self.page.locator("#invoiceDialog")).to_be_visible()
-                expect(self.page.locator(".invoice-status.is-confirmed")).to_have_count(0)
+                expect(self.page.locator(".invoice-status.is-confirmed")).to_have_count(1)
                 self.assertEqual(self.state(), original)
         self.assertEqual(downloads, [])
         self.assertFalse(self.page.evaluate("Boolean(window.printRequested)"))
@@ -275,12 +454,12 @@ class CheckoutTests(unittest.TestCase):
 
     def test_invoice_confirmation_preserves_orders_placed_in_another_tab(self):
         self.demo_checkout()
-        self.page.locator("#confirmCheckout").click()
+        self.place_order()
         first = self.state()["orders"][0]
         other = self.context.new_page()
         other.goto(self.base)
         self.demo_checkout(other)
-        other.locator("#confirmCheckout").click()
+        self.place_order(other)
         before = self.state()
         self.page.locator("#declineInvoice").click()
         after = self.state()
@@ -311,7 +490,9 @@ class CheckoutTests(unittest.TestCase):
         self.page.locator("#confirmCheckout").click()
         self.assertIsNone(self.state())
         self.page.locator("#checkoutFulfillment").select_option("pickup")
-        self.page.locator("#confirmCheckout").dblclick()
+        self.page.locator("#confirmCheckout").click()
+        self.assertIsNone(self.state())
+        self.page.locator("#placeReviewedOrder").dblclick()
         expect(self.page.locator("#invoiceDialog")).to_be_visible()
         self.assertEqual(len(self.state()["orders"]), 1)
         self.assertEqual(self.state()["orders"][0]["shipping"], 0)
@@ -323,7 +504,7 @@ class CheckoutTests(unittest.TestCase):
         other.goto(self.base)
         self.demo_checkout(other)
         self.page.locator("#cartQuantity0").fill("29")
-        self.page.locator("#confirmCheckout").click()
+        self.place_order()
         other.locator("#confirmCheckout").click()
         expect(other.locator("#checkoutError")).to_contain_text("không đủ tồn kho")
         expect(other.locator("#invoiceDialog")).not_to_be_visible()
@@ -341,7 +522,8 @@ class CheckoutTests(unittest.TestCase):
           };
         }""", STORAGE_KEY)
         self.page.locator("#confirmCheckout").click()
-        expect(self.page.locator("#checkoutError")).to_contain_text("Đơn chưa được tạo")
+        self.page.locator("#placeReviewedOrder").click()
+        expect(self.page.locator("#checkoutReviewError")).to_contain_text("Đơn chưa được tạo")
         expect(self.page.locator("#invoiceDialog")).not_to_be_visible()
         self.assertIsNone(self.state())
 
@@ -415,12 +597,12 @@ class CheckoutTests(unittest.TestCase):
         self.page.locator("#checkoutMedicineSearch").fill("muối")
         expect(self.page.locator(".checkout-product:visible")).to_have_count(1)
         self.assertLessEqual(self.page.locator("#checkoutDialog").evaluate("e => e.scrollWidth - e.clientWidth"), 1)
-        self.page.locator("#confirmCheckout").click()
+        self.place_order()
         expect(self.page.locator("#invoiceDialog")).to_be_visible()
         self.assertLessEqual(self.page.locator("#invoiceDialog").evaluate("e => e.scrollWidth - e.clientWidth"), 1)
         self.page.keyboard.press("Escape")
         expect(self.page.locator("#invoiceDialog")).not_to_be_visible()
-        self.assertNotIn("confirmedAt", self.state()["orders"][0])
+        self.assertTrue(self.state()["orders"][0]["confirmedAt"])
         self.page.locator("#checkoutHistoryButton").click()
         expect(self.page.locator(".checkout-history-order")).to_have_count(1)
 
@@ -433,7 +615,7 @@ class CheckoutTests(unittest.TestCase):
         self.assertEqual(self.page.evaluate("JSON.parse(sessionStorage.smartPharmacyActiveCustomer).email"), customer["email"])
         self.demo_checkout()
         expect(self.page.locator("#checkoutEmail")).to_have_value(customer["email"])
-        self.page.locator("#confirmCheckout").click()
+        self.place_order()
         self.page.reload()
         expect(self.page.locator("#customerHistoryCount")).to_have_text("1 đơn")
         self.page.locator("#customerOrderHistory").get_by_role("button", name="Xem hóa đơn").click()
