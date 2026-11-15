@@ -151,5 +151,9 @@ export async function addressAtCurrentPosition(latitude, longitude, { signal } =
   if (!item || typeof item.display_name !== 'string' || !item.display_name.trim() || item.display_name.length > 500 || item.address?.country_code !== 'vn') {
     throw new Error('Chưa tìm được địa chỉ tại vị trí hiện tại ở Việt Nam. Vui lòng nhập địa chỉ thủ công.');
   }
-  return { label: item.display_name, complete: Boolean(item.address.house_number && (item.address.road || item.address.pedestrian || item.address.residential || item.address.footway)) };
+  const road = item.address.road || item.address.pedestrian || item.address.residential || item.address.footway || '';
+  return { label: item.display_name, latitude, longitude, source: 'geolocation', precision: 'position', houseNumberVerified: false,
+    houseNumber: String(item.address.house_number || ''), road: String(road), postcode: String(item.address.postcode || ''),
+    complete: Boolean(item.address.house_number && road),
+    osmId: String(item.osm_id || item.place_id || ''), osmType: String(item.osm_type || '') };
 }
