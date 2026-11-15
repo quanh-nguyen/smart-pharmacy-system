@@ -68,6 +68,23 @@
 .checkout-summary p { margin: 0; color: #64748b; font-size: 11px; }
 .checkout-error { margin: 0 28px 14px; color: #bd3434; font-size: 13px; }
 .checkout-error:empty { display: none; }
+.address-hint, .address-status, .address-attribution { font-size: 11px; line-height: 1.7; color: #526781; }
+.address-status.is-verified { color: #157347; font-weight: 600; }
+.address-error { color: #bd3434; font-size: 12px; line-height: 1.7; }
+.address-error:empty, .address-status:empty { display: none; }
+.address-results { margin: 12px 0; padding: 12px; border: 1px solid #cbd9eb; border-radius: 9px; min-width: 0; }
+.address-results[hidden] { display: none; }
+.address-results legend { font-size: 12px; font-weight: 600; color: #17345f; }
+.address-results label { display: flex; align-items: flex-start; gap: 9px; font-weight: 400; line-height: 1.7; }
+.address-results label span { color: #334155; }
+.address-results input[type="radio"] { flex: 0 0 18px; width: 18px; min-height: 18px; margin-top: 2px; }
+.address-results a { display: inline-block; margin: 0 0 8px 27px; font-size: 11px; }
+.review-sheet { padding: 0 28px 22px; }
+.review-sheet h3 { font-size: 15px; color: #17345f; }
+.review-sheet p { color: #526781; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.review-sheet .invoice-customer { margin-top: 0; }
+.review-verified { padding: 10px 12px; border-radius: 8px; background: #e5f6ed; color: #157347 !important; }
+.review-dialog .shop-dialog-footer { flex-wrap: wrap; }
 .shop-dialog-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 18px 28px; border-top: 1px solid #e2e8f0; background: #f8fafd; }
 .shop-dialog-footer > span { flex: 1; max-width: 300px; margin-right: auto; color: #64748b; font-size: 11px; line-height: 1.6; }
 .shop-dialog-footer button { font-size: 13px; }
@@ -140,6 +157,9 @@ body:has(.shop-dialog[open]) { overflow: hidden; }
   .invoice-top > div + div, .invoice-customer > div + div { margin-top: 16px; }
   #checkoutHistoryList { padding: 0 18px 20px; }
   .checkout-error { margin-left: 18px; margin-right: 18px; }
+  .review-sheet { padding: 0 18px 20px; }
+  .review-sheet .invoice-table :is(th, td) { padding: 10px 5px; font-size: 11px; }
+  .review-sheet .invoice-table :is(th, td):first-child { min-width: 105px; }
 }
 @media print {
   @page { size: A4; margin: 15mm; }
