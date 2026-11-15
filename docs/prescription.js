@@ -11,9 +11,10 @@ const NUMBER = "\\d+(?:[.,]\\d+)?";
 const UNIT = "(?:mcg|[µμ]g|mg|kg|g|ml|iu|ui|cfu|ufc|%)";
 const SCALE = "(?:(?:tỉ|tỷ|ti|ty|triệu|trieu|nghìn|nghin|million|billion)\\s*)?";
 const STRENGTH = new RegExp(`${NUMBER}\\s*${SCALE}${UNIT}(?:\\s*[+/]\\s*(?:${NUMBER}\\s*)?${SCALE}${UNIT})*(?!\\p{L})`, "iu");
-const NUMBERING = /^[\s'"‘’“”]*\(?\s*(\d{1,2})\s*[.,)/:-]\s*/;
-const INSTRUCTION = /^(?:ngay\b|uong\b|sang\b|trua\b|chieu\b|toi\b|cach dung\b|moi\b|boi\b|nho\b|tiem\b|xit\b|sl\b|so luong\b)/;
-const HEADER = /^(?:don thuoc|ho ten|benh nhan|tuoi|dia chi|chan doan|bac si|bs\b|ngay ke|loi dan|tai kham|phong kham|benh vien|luu y|tong cong|thanh tien|so ngay|so dien thoai)/;
+const NUMBERING = /^[\s'"‘’“”]*\(?\s*(\d{1,2})(?:\s*[.,)/:-]\s*|\s+(?=\p{L}))/u;
+const INSTRUCTION = /^(?:ngay\b|uong\b|sang\b|trua\b|chieu\b|toi\b|cach dung\b|lieu dung\b|sau an\b|truoc an\b|sau bua\b|truoc bua\b|moi\b|boi\b|nho\b|tiem\b|xit\b|sl\b|so luong\b)/;
+const HEADER = /^(?:don thuoc|ho ten|benh nhan|tuoi|dia chi|chan doan|bac si|bs\b|ngay ke|loi dan|tai kham|phong kham|benh vien|luu y|tong cong|thanh tien|so ngay|so dien thoai|hoat chat|thanh phan|ham luong|ten thuoc|stt\b)/;
+const QUANTITY = /^(?:\d+(?:[.,]\d+)?\s*)?(?:vien|vi|hop|goi|ong|chai|lo|tuyp|mg|mcg|ml|iu|ui)\b/;
 // Product classification is not part of the medicine name. Do not strip release forms such as (SR).
 const CLASSIFICATION = /\(\s*(?:NT|TPCN|TPBVSK|thực\s*phẩm\s*(?:chức\s*năng|bảo\s*vệ\s*sức\s*khỏe))\s*\)/iu;
 
@@ -23,8 +24,18 @@ function normalizeStrength(value) {
     .replace(/ufc/g, "cfu").replace(/µg/g, "mcg").replace(/ui/g, "iu");
 }
 
+function rowMarker(value) {
+  const text = String(value || '');
+  const strength = text.match(STRENGTH);
+  // A wrapped value such as "1 tỉ CFU" is not row number 1.
+  if (strength && /^[\s(]*$/.test(text.slice(0, strength.index))) return null;
+  return text.match(NUMBERING);
+}
+
 export function parseMedicine(value) {
-  const text = String(value).replace(NUMBERING, "").trim();
+  const raw = String(value);
+  const marker = rowMarker(raw);
+  const text = (marker ? raw.slice(marker[0].length) : raw).trim();
   const strength = text.match(STRENGTH);
   const name = (strength ? text.slice(0, strength.index) : text).split(CLASSIFICATION)[0]
     .replace(/\s*(?:\bSL\s*[:.]?|\bsố lượng\s*:|[x×]\s*\d|\d+\s*(?:viên|vỉ|hộp|gói|ống|chai|lọ|tuýp)\b|\b(?:uống|ngày uống|cách dùng)\b).*$/iu, "")
@@ -42,46 +53,78 @@ function uniqueMedicines(items) {
   });
 }
 
+function lineBounds(line) {
+  const box = line?.bbox;
+  return box && ['x0', 'y0', 'x1', 'y1'].every(key => Number.isFinite(box[key])) ? box : null;
+}
+
+function mergeLines(previous, line) {
+  const confidences = [previous.confidence, line.confidence].filter(Number.isFinite);
+  const left = lineBounds(previous), right = lineBounds(line);
+  return { ...previous, text: `${previous.text.trim()} ${line.text.trim()}`,
+    words: [...(previous.words || []), ...(line.words || [])],
+    bbox: left && right ? {x0: Math.min(left.x0, right.x0), y0: Math.min(left.y0, right.y0), x1: Math.max(left.x1, right.x1), y1: Math.max(left.y1, right.y1)} : previous.bbox,
+    confidence: confidences.length ? Math.min(...confidences) : undefined };
+}
+
+function sourceLines(data) {
+  const structured = data.lines?.length ? data.lines : (data.blocks || []).flatMap(block =>
+    (block.paragraphs || []).flatMap(paragraph => paragraph.lines || []));
+  return structured.length ? structured : String(data.text || '').split(/\r?\n/).map(text => ({ text }));
+}
+
 function prescriptionCandidates(data) {
-  const source = data.lines?.length ? data.lines : String(data.text || "").split(/\r?\n/).map(text => ({ text }));
+  const source = sourceLines(data).flatMap(line => {
+    const parts = String(line.text || '').split(/\s+(?=[‘’'"“”]*\(?\d{1,2}\s*[.)]\s+\p{L})/u).filter(text => text.trim());
+    return parts.map(text => ({...line, text, sharedBounds: parts.length > 1}));
+  });
   const lines = [];
   for (const line of source) {
     const previous = lines.at(-1);
     const strength = String(line.text || "").match(STRENGTH);
-    if (previous && NUMBERING.test(previous.text) && !STRENGTH.test(previous.text) && strength &&
-      /^[\s(]*$/.test(String(line.text).slice(0, strength.index))) {
-      const confidences = [previous.confidence, line.confidence].filter(Number.isFinite);
-      lines[lines.length - 1] = { ...previous, text: `${previous.text} ${line.text}`,
-        words: [...(previous.words || []), ...(line.words || [])],
-        confidence: confidences.length ? Math.min(...confidences) : undefined };
+    const normalized = normalizeMedicine(line.text);
+    const left = lineBounds(previous), right = lineBounds(line);
+    const sameBaseline = left && right && Math.abs((left.y0+left.y1-right.y0-right.y1)/2) < Math.max(left.y1-left.y0, right.y1-right.y0)*0.45
+      && right.x0 >= left.x1 && right.x0-left.x1 < Math.max(left.y1-left.y0, right.y1-right.y0)*2;
+    const continuation = strength && !rowMarker(line.text) && !HEADER.test(normalized) && !INSTRUCTION.test(normalized)
+      && (/^[\s(]*$/.test(String(line.text).slice(0, strength.index)) || /[/+\-–]\s*$/.test(previous?.text || '') || /^[\p{Ll}]/u.test(line.text.trim()) || sameBaseline);
+    if (previous && rowMarker(previous.text) && continuation && (!STRENGTH.test(previous.text) || /[+/]\s*$/.test(previous.text))) {
+      lines[lines.length - 1] = mergeLines(previous, line);
     } else lines.push(line);
   }
-  const candidates = lines.flatMap(line => {
+  const candidates = lines.flatMap((line, index) => {
     const rawText = String(line.text || "").trim();
-    const normalized = normalizeMedicine(rawText.replace(NUMBERING, ""));
-    if (HEADER.test(normalized) || INSTRUCTION.test(normalized) ||
-      (!NUMBERING.test(rawText) && !STRENGTH.test(rawText) && !CLASSIFICATION.test(rawText))) return [];
+    const marker = rowMarker(rawText);
+    const normalized = normalizeMedicine(marker ? rawText.slice(marker[0].length) : rawText);
+    if (HEADER.test(normalized) || INSTRUCTION.test(normalized) || QUANTITY.test(normalized) ||
+      (!marker && /^\s*\(/.test(rawText)) ||
+      (!marker && !STRENGTH.test(rawText) && !CLASSIFICATION.test(rawText))) return [];
     const item = parseMedicine(rawText);
     if (!uniqueMedicines([item]).length) return [];
     const lineConfidence = Number.isFinite(line.confidence) ? line.confidence
       : Number.isFinite(data.confidence) ? data.confidence : null;
     const name = normalizeMedicine(item.name);
+    const nameWords = new Set(name.match(/[\p{L}\p{N}]+/gu) || []);
     const wordConfidences = (line.words || []).filter(word => {
       const text = normalizeMedicine(word.text).replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
-      return text.length > 1 && name.includes(text) && Number.isFinite(word.confidence);
+      return text.length > 0 && nameWords.has(text) && Number.isFinite(word.confidence);
     }).map(word => word.confidence);
     const confidence = wordConfidences.length ? Math.min(lineConfidence ?? 100, ...wordConfidences) : lineConfidence;
     const unparsedTail = (rawText.split(CLASSIFICATION)[1] || "").replace(CLASSIFICATION, "")
       .replace(/\s*(?:[x×]\s*\d|SL\s*[:.]?|=\s*\d).*$/iu, "").trim();
     const suspicious = /[^\p{L}\p{N}\s().+/'’\-–]/u.test(item.name) ||
-      (!NUMBERING.test(rawText) && CLASSIFICATION.test(rawText)) ||
+      (!marker && CLASSIFICATION.test(rawText)) ||
       (!item.strength && CLASSIFICATION.test(rawText) && /[\p{L}\p{N}]/u.test(unparsedTail));
-    return [{ ...item, rawText, confidence, suspicious,
-      number: NUMBERING.test(rawText) ? Number(rawText.match(NUMBERING)[1]) : null }];
+    return [{ ...item, rawText, confidence, suspicious, bbox: lineBounds(line), sharedBounds: line.sharedBounds, index,
+      number: marker ? Number(marker[1]) : null }];
   });
-  // Keep a classified medicine whose number was unreadable, but not an unnumbered ingredient note.
-  return candidates.some(item => item.number != null)
-    ? candidates.filter(item => item.number != null || CLASSIFICATION.test(item.rawText)) : candidates;
+  const hasNumberedRows = candidates.some(item => item.number != null);
+  return candidates.map((item, index) => {
+    const previous = candidates.slice(0, index).reverse().find(row => row.number != null)?.number;
+    const next = candidates.slice(index+1).find(row => row.number != null)?.number;
+    return { ...item, suspicious: item.suspicious || (hasNumberedRows && item.number == null),
+      order: item.number ?? (previous != null ? previous + 0.5 : next != null ? next - 0.5 : index + 1) };
+  });
 }
 
 export function parsePrescriptionMedicines(text) {
@@ -89,26 +132,75 @@ export function parsePrescriptionMedicines(text) {
 }
 
 function candidateScore(item) {
-  return (item.confidence ?? 50) - (item.suspicious ? 25 : 0);
+  return (item.confidence ?? 50) - (item.suspicious ? 25 : 0) + (item.number != null ? 4 : 0);
 }
 
-// Compare readings of the same numbered row; never concatenate conflicting OCR names into extra medicines.
+function separateRows(a, b) {
+  if (!a.bbox || !b.bbox) return false;
+  const height = Math.max(a.bbox.y1-a.bbox.y0, b.bbox.y1-b.bbox.y0, 1);
+  return Math.abs((a.bbox.y0+a.bbox.y1-b.bbox.y0-b.bbox.y1)/2) > height*2;
+}
+
+function samePrintedRow(a, b) {
+  if (!a.bbox || !b.bbox || a.sharedBounds || b.sharedBounds) return false;
+  const x = Math.max(0, Math.min(a.bbox.x1, b.bbox.x1)-Math.max(a.bbox.x0, b.bbox.x0));
+  const y = Math.max(0, Math.min(a.bbox.y1, b.bbox.y1)-Math.max(a.bbox.y0, b.bbox.y0));
+  const area = box => Math.max(1, (box.x1-box.x0)*(box.y1-box.y0));
+  return x*y/(area(a.bbox)+area(b.bbox)-x*y) > 0.65;
+}
+
+// Merge evidence from every pass. A row absent from the best overall pass must
+// still survive; conflicting readings of the same printed row remain flagged.
 export function selectPrescriptionReadings(readings) {
   const passes = readings.map(prescriptionCandidates);
-  const passScore = items => items.reduce((sum, item) => sum + Math.max(0, candidateScore(item)) + (item.number ? 20 : 0), 0);
-  const base = passes.reduce((best, items) => passScore(items) > passScore(best) ? items : best, []);
+  const groups = [];
+  passes.forEach((items, pass) => items.forEach(item => {
+    const label = normalizeMedicine(medicineLabel(item));
+    let group = groups.find(rows => item.number != null && rows.some(other => other.number === item.number && !separateRows(item, other)));
+    group ||= groups.find(rows => rows.some(other => normalizeMedicine(medicineLabel(other)) === label));
+    group ||= groups.find(rows => !rows.some(other => other.pass === pass) && rows.some(other => samePrintedRow(item, other)));
+    if (group) group.push({...item, pass});
+    else groups.push([{...item, pass}]);
+  }));
+  const numberedGroups = new Map();
+  for (const group of groups) for (const number of new Set(group.map(item => item.number).filter(number => number != null))) {
+    numberedGroups.set(number, (numberedGroups.get(number) || 0) + 1);
+  }
+  const selectedGroups = groups.map(alternatives => {
+    const support = new Map();
+    for (const item of alternatives) {
+      const key = normalizeMedicine(medicineLabel(item));
+      if (!support.has(key)) support.set(key, new Set());
+      support.get(key).add(item.pass);
+    }
+    const score = item => candidateScore(item) + (support.get(normalizeMedicine(medicineLabel(item))).size-1)*8;
+    let selected = alternatives.reduce((best, other) => score(other) > score(best) ? other : best, alternatives[0]);
+    // Prefer a readable continuation over a truncated brand name, without guessing spelling.
+    const moreComplete = alternatives.filter(other => {
+      const sameName = normalizeMedicine(other.name) === normalizeMedicine(selected.name);
+      const longerName = normalizeMedicine(other.name).startsWith(normalizeMedicine(selected.name)+' ');
+      const keepsStrength = !selected.strength || normalizeStrength(other.strength) === normalizeStrength(selected.strength);
+      return (sameName || longerName) && keepsStrength && (longerName || (!selected.strength && other.strength))
+        && candidateScore(other) >= candidateScore(selected)-10;
+    }).sort((a,b) => Number(Boolean(b.strength))-Number(Boolean(a.strength)) || b.name.length-a.name.length);
+    if (moreComplete.length) selected = moreComplete[0];
+    const rowNumbers = [...new Set(alternatives.map(item => item.number).filter(number => number != null))];
+    const key = normalizeMedicine(medicineLabel(selected));
+    const conflict = alternatives.some(other => normalizeMedicine(medicineLabel(other)) !== key);
+    const singlePass = passes.length > 1 && new Set(alternatives.map(item => item.pass)).size === 1;
+    return { ...selected, rowNumbers, rowNumber: selected.number ?? rowNumbers[0] ?? null,
+      needsReview: selected.suspicious || conflict || singlePass || rowNumbers.some(number => numberedGroups.get(number)>1)
+        || (!selected.strength && !CLASSIFICATION.test(selected.rawText))
+        || selected.confidence == null || selected.confidence < 80 };
+  }).sort((a,b) => (a.rowNumber ?? a.order)-(b.rowNumber ?? b.order)
+    || (a.bbox && b.bbox ? a.bbox.y0-b.bbox.y0 || a.bbox.x0-b.bbox.x0 : 0));
   const seen = new Set();
-  return base.flatMap(item => {
-    const alternatives = item.number == null ? [item]
-      : passes.flatMap(items => items.filter(other => other.number === item.number));
-    const selected = alternatives.reduce((best, other) => candidateScore(other) > candidateScore(best) ? other : best, item);
+  return selectedGroups.flatMap(selected => {
     const key = normalizeMedicine(medicineLabel(selected));
     if (seen.has(key)) return [];
     seen.add(key);
-    const conflict = alternatives.some(other => normalizeMedicine(medicineLabel(other)) !== key);
     return [{ name: selected.name, strength: selected.strength, rawText: selected.rawText,
-      confidence: selected.confidence,
-      needsReview: selected.suspicious || conflict || selected.confidence == null || selected.confidence < 80 }];
+      confidence: selected.confidence, rowNumber: selected.rowNumber, rowNumbers: selected.rowNumbers, needsReview: selected.needsReview }];
   });
 }
 
@@ -143,6 +235,9 @@ export async function preparePrescriptionImage(file, signal) {
     ctx.fillStyle = "white"; ctx.fillRect(0, 0, width, height);
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bitmap, 0, 0, width, height);
+    const natural = document.createElement('canvas');
+    natural.width = width; natural.height = height;
+    natural.getContext('2d').drawImage(enhanced, 0, 0);
     const image = ctx.getImageData(0, 0, width, height);
     const gray = new Uint8Array(width * height);
     const histogram = new Uint32Array(256);
@@ -194,7 +289,7 @@ export async function preparePrescriptionImage(file, signal) {
     binary.width = width; binary.height = height;
     binary.getContext("2d").putImageData(image, 0, 0);
     signal.throwIfAborted();
-    return { enhanced, binary };
+    return { enhanced, binary, natural };
   } finally {
     bitmap.close();
   }
@@ -233,13 +328,19 @@ function abortable(promise, signal) {
   });
 }
 
-export async function readPrescriptionImage(file, { signal, onProgress = () => {} }) {
+export async function readPrescriptionImage(file, { signal, onProgress = () => {}, onText = () => {} }) {
   const timeoutSignal = AbortSignal.timeout(90000);
-  const operation = AbortSignal.any([signal, timeoutSignal]);
+  const operation = AbortSignal.any([...(signal ? [signal] : []), timeoutSignal]);
   let worker;
   let finished = false;
   let images;
   let pass = 0;
+  const totalPasses = 3;
+  let reportedProgress = 0;
+  const progress = value => {
+    reportedProgress = Math.max(reportedProgress, Math.min(1, value));
+    onProgress(reportedProgress);
+  };
   try {
     images = await preparePrescriptionImage(file, operation);
     const { createWorker } = await abortable(loadLibrary(), operation);
@@ -253,7 +354,7 @@ export async function readPrescriptionImage(file, { signal, onProgress = () => {
       // Tesseract already rejects the job promise; avoid an additional uncaught browser error.
       errorHandler: error => rejectWorkerError(new Error(String(error))),
       logger: event => {
-        if (!operation.aborted && event.status === "recognizing text") onProgress((pass + event.progress) / 2);
+        if (!operation.aborted && event.status === "recognizing text") progress((pass + event.progress) / totalPasses);
       },
     }).then(created => {
       if (operation.aborted || finished) {
@@ -264,27 +365,25 @@ export async function readPrescriptionImage(file, { signal, onProgress = () => {
       return created;
     });
     await abortable(Promise.race([creating, workerError]), operation);
-    const recognize = image => abortable(Promise.race([worker.recognize(image, {
-      rotateAuto: true, tessedit_pageseg_mode: pass ? "6" : "3",
+    const recognize = (image, segmentation) => abortable(Promise.race([worker.recognize(image, {
+      rotateAuto: true, tessedit_pageseg_mode: segmentation,
       preserve_interword_spaces: "1", user_defined_dpi: "300",
     }), workerError]), operation);
-    const first = (await recognize(images.enhanced)).data;
-    let medicines = selectPrescriptionReadings([first]);
-    const numbers = prescriptionCandidates(first).map(item => item.number).filter(number => number != null).sort((a, b) => a - b);
-    const missingRow = numbers.some((number, index) => number !== index + 1);
-    if (!medicines.length || missingRow || medicines.some(item => item.needsReview)) {
-      pass = 1;
-      const second = (await recognize(images.binary)).data;
-      medicines = selectPrescriptionReadings([first, second]);
+    const readings = [];
+    const variants = [[images.enhanced, '3'], [images.natural, '11'], [images.binary, '6']];
+    for (pass = 0; pass < variants.length; pass++) {
+      operation.throwIfAborted();
+      const data = (await recognize(...variants[pass])).data;
+      readings.push(data);
+      onText(readings.map((reading, index) => `Lần đọc ${index+1}\n${reading.text || sourceLines(reading).map(line => line.text).join('\n')}`).join('\n\n'));
+      progress((pass+1) / totalPasses);
     }
-    onProgress(1);
-    return medicines;
+    return selectPrescriptionReadings(readings);
   } finally {
     finished = true;
     if (worker) await worker.terminate();
     if (images) {
-      images.enhanced.width = images.enhanced.height = 1;
-      images.binary.width = images.binary.height = 1;
+      for (const canvas of Object.values(images)) canvas.width = canvas.height = 1;
     }
   }
 }
