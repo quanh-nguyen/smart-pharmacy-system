@@ -165,10 +165,22 @@ class CheckoutTests(unittest.TestCase):
             self.assertIn("74.000 ₫", exported)
             self.assertIn("&lt;script&gt;window.xss=2&lt;/script&gt;", exported)
             self.assertNotIn("<script>", exported)
+            self.assertIn("Đã xác nhận · Demo", exported)
+            self.assertIn("Thanh toán trực tiếp khi nhận hàng (COD)", exported)
+            confirmed = self.state()["orders"][0]
+            self.assertEqual(confirmed["status"], "Đã xác nhận · Demo")
+            self.assertEqual(confirmed["invoicePreference"], "download")
+            self.assertTrue(confirmed["confirmedAt"])
+            self.assertEqual(confirmed["paymentStatus"], "Chưa thanh toán")
+            self.assertEqual(self.state()["inventories"], state["inventories"])
+            expect(self.page.locator(".invoice-status.is-confirmed")).to_have_text("Đã xác nhận · Demo")
             # Run the print action and separately exercise the browser's print layout.
             self.page.evaluate("window.print = () => { window.printRequested = true; }")
             self.page.locator("#printInvoice").click()
             self.assertTrue(self.page.evaluate("window.printRequested"))
+            self.assertEqual(self.state()["orders"][0]["confirmedAt"], confirmed["confirmedAt"])
+            self.assertEqual(self.state()["orders"][0]["invoicePreference"], "print")
+            self.assertEqual(len(self.state()["orders"]), 1)
             self.page.emulate_media(media="print")
             expect(self.page.locator("main")).to_be_hidden()
             expect(self.page.locator("#invoiceContent")).to_be_visible()
@@ -178,12 +190,105 @@ class CheckoutTests(unittest.TestCase):
         self.page.reload()
         self.page.locator("#checkoutHistoryButton").click()
         expect(self.page.locator(".checkout-history-order")).to_have_count(1)
+        expect(self.page.locator(".checkout-history-order .demo-badge")).to_have_text("Đã xác nhận · Demo")
         self.page.get_by_role("button", name="Xem hóa đơn", exact=True).click()
         expect(self.page.locator("#invoiceContent")).to_contain_text(order["id"])
         expect(self.page.locator("#invoiceContent")).to_contain_text("74.000 ₫")
+        expect(self.page.locator(".invoice-status.is-confirmed")).to_be_visible()
         self.page.locator("#invoiceDialog [data-close-dialog]").click()
         self.demo_checkout()
         expect(self.page.locator("#cartQuantity0")).to_have_attribute("max", "28")
+
+    def test_declining_invoice_confirms_cod_order_without_downloading(self):
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        downloads = []
+        self.page.on("download", lambda download: downloads.append(download))
+        self.demo_checkout()
+        self.page.locator("#confirmCheckout").click()
+        original = self.state()
+        self.page.locator("#declineInvoice").click()
+        expect(self.page.locator("#invoiceDialog")).not_to_be_visible()
+        expect(self.page.locator("#checkoutFeedback")).to_contain_text("Đơn hàng demo đã được xác nhận")
+        expect(self.page.locator("#checkoutFeedback")).to_contain_text("không nhận hóa đơn")
+        order = self.state()["orders"][0]
+        self.assertEqual(order["status"], "Đã xác nhận · Demo")
+        self.assertEqual(order["invoicePreference"], "none")
+        self.assertTrue(order["confirmedAt"])
+        self.assertEqual(order["paymentStatus"], "Chưa thanh toán")
+        self.assertEqual(self.state()["inventories"], original["inventories"])
+        self.assertEqual(downloads, [])
+        self.page.reload()
+        self.page.locator("#checkoutHistoryButton").click()
+        expect(self.page.locator(".checkout-history-order")).to_have_count(1)
+        expect(self.page.locator(".checkout-history-order")).to_contain_text("Đã xác nhận · Demo")
+        expect(self.page.locator(".checkout-history-order")).to_contain_text("Hóa đơn: Không nhận")
+        self.page.get_by_role("button", name="Xem hóa đơn", exact=True).click()
+        expect(self.page.locator("#invoiceActionStatus")).to_contain_text("không nhận hóa đơn")
+        expect(self.page.locator("#downloadInvoice")).to_be_enabled()
+        self.assertLessEqual(self.page.locator("#invoiceDialog").evaluate("e => e.scrollWidth-e.clientWidth"), 1)
+
+    def test_print_confirms_cod_order_before_opening_print_dialog(self):
+        self.demo_checkout()
+        self.page.locator("#checkoutFulfillment").select_option("delivery")
+        self.page.locator("#confirmCheckout").click()
+        self.page.evaluate("""key => {
+          window.print = () => {
+            window.printedOrder = JSON.parse(localStorage.getItem(key)).orders[0];
+            window.printedContent = document.querySelector('#invoiceContent').textContent;
+          };
+        }""", STORAGE_KEY)
+        self.page.locator("#printInvoice").click()
+        printed = self.page.evaluate("window.printedOrder")
+        self.assertEqual(printed["status"], "Đã xác nhận · Demo")
+        self.assertEqual(printed["invoicePreference"], "print")
+        self.assertEqual(printed["paymentStatus"], "Chưa thanh toán")
+        self.assertIn("Đã xác nhận · Demo", self.page.evaluate("window.printedContent"))
+        self.assertIn("Thanh toán trực tiếp khi nhận hàng (COD)", self.page.evaluate("window.printedContent"))
+
+    def test_invoice_confirmation_storage_failure_does_not_claim_success(self):
+        self.demo_checkout()
+        self.page.locator("#confirmCheckout").click()
+        original = self.state()
+        downloads = []
+        self.page.on("download", lambda download: downloads.append(download))
+        self.page.evaluate("""key => {
+          window.originalCheckoutWrite = Storage.prototype.setItem;
+          Storage.prototype.setItem = function(k,v) {
+            if (k===key) throw new DOMException('Full','QuotaExceededError');
+            return window.originalCheckoutWrite.call(this,k,v);
+          };
+          window.print = () => { window.printRequested = true; };
+        }""", STORAGE_KEY)
+        for action in ["downloadInvoice", "printInvoice", "declineInvoice"]:
+            with self.subTest(action=action):
+                self.page.locator("#"+action).click()
+                expect(self.page.locator("#invoiceError")).to_contain_text("Chưa thể lưu xác nhận")
+                expect(self.page.locator("#invoiceDialog")).to_be_visible()
+                expect(self.page.locator(".invoice-status.is-confirmed")).to_have_count(0)
+                self.assertEqual(self.state(), original)
+        self.assertEqual(downloads, [])
+        self.assertFalse(self.page.evaluate("Boolean(window.printRequested)"))
+        self.page.evaluate("() => { Storage.prototype.setItem = window.originalCheckoutWrite; }")
+        self.page.locator("#declineInvoice").click()
+        expect(self.page.locator("#invoiceDialog")).not_to_be_visible()
+        self.assertEqual(self.state()["orders"][0]["status"], "Đã xác nhận · Demo")
+
+    def test_invoice_confirmation_preserves_orders_placed_in_another_tab(self):
+        self.demo_checkout()
+        self.page.locator("#confirmCheckout").click()
+        first = self.state()["orders"][0]
+        other = self.context.new_page()
+        other.goto(self.base)
+        self.demo_checkout(other)
+        other.locator("#confirmCheckout").click()
+        before = self.state()
+        self.page.locator("#declineInvoice").click()
+        after = self.state()
+        self.assertEqual(len(after["orders"]), 2)
+        self.assertEqual(after["inventories"], before["inventories"])
+        self.assertEqual(after["orders"][0], before["orders"][0])
+        self.assertEqual(after["orders"][1]["id"], first["id"])
+        self.assertEqual(after["orders"][1]["status"], "Đã xác nhận · Demo")
 
     def test_validation_and_pickup_without_delivery_address(self):
         self.demo_checkout()
@@ -315,6 +420,7 @@ class CheckoutTests(unittest.TestCase):
         self.assertLessEqual(self.page.locator("#invoiceDialog").evaluate("e => e.scrollWidth - e.clientWidth"), 1)
         self.page.keyboard.press("Escape")
         expect(self.page.locator("#invoiceDialog")).not_to_be_visible()
+        self.assertNotIn("confirmedAt", self.state()["orders"][0])
         self.page.locator("#checkoutHistoryButton").click()
         expect(self.page.locator(".checkout-history-order")).to_have_count(1)
 
@@ -332,6 +438,8 @@ class CheckoutTests(unittest.TestCase):
         expect(self.page.locator("#customerHistoryCount")).to_have_text("1 đơn")
         self.page.locator("#customerOrderHistory").get_by_role("button", name="Xem hóa đơn").click()
         expect(self.page.locator("#invoiceContent")).to_contain_text(customer["email"])
+        self.page.locator("#declineInvoice").click()
+        expect(self.page.locator("#customerOrderHistory .order-status")).to_have_text("Đã xác nhận · Demo")
 
     def test_api_orders_use_server_invoice_snapshots_and_keep_demo_storage_separate(self):
         user = {"id": "customer-1", "name": "API Customer", "email": "api@example.test", "role": "CUSTOMER"}
@@ -379,10 +487,15 @@ class CheckoutTests(unittest.TestCase):
         expect(self.page.locator("#invoiceDialog")).to_be_visible()
         expect(self.page.locator("#invoiceContent")).to_contain_text("34.000 ₫")
         expect(self.page.locator("#invoiceContent")).to_contain_text("API Medicine")
+        expect(self.page.locator("#declineInvoice")).not_to_be_visible()
         self.assertNotIn("HÓA ĐƠN DEMO", self.page.locator("#invoiceContent").inner_text())
         self.assertEqual(created, [{"pharmacyId": 101, "items": [{"drugId": 7, "quantity": 2}],
                                     "shippingAddress": "20 Customer Street", "phone": "0901234567"}])
         self.assertIsNone(self.state())
+        self.page.evaluate("window.print = () => {}")
+        self.page.locator("#printInvoice").click()
+        self.assertIsNone(self.state())
+        expect(self.page.locator("#invoiceContent")).to_contain_text("Chưa ghi nhận thanh toán")
         self.page.locator("#invoiceDialog [data-close-dialog]").click()
         self.page.reload()
         self.page.locator("#customerOrderHistory [data-api-invoice]").click()
