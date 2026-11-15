@@ -23,6 +23,9 @@ const medicineInput = document.querySelector("#medicineInput");
 const removePrescriptionImage = document.querySelector("#removePrescriptionImage");
 const retryPrescriptionOcr = document.querySelector("#retryPrescriptionOcr");
 const prescriptionOcrStatus = document.querySelector("#prescriptionOcrStatus");
+const prescriptionRawDetails = document.querySelector('#prescriptionRawDetails');
+const prescriptionRawText = document.querySelector('#prescriptionRawText');
+const openPrescriptionImage = document.querySelector('#openPrescriptionImage');
 const prescriptionMedicines = document.querySelector("#prescriptionMedicines");
 const confirmPrescriptionMedicines = document.querySelector("#confirmPrescriptionMedicines");
 let prescriptionImageUrl = null;
@@ -847,6 +850,11 @@ function clearPrescriptionImage() {
   fileInput.value = "";
   preview.removeAttribute("src");
   preview.style.display = "none";
+  prescriptionRawText.value = '';
+  prescriptionRawDetails.hidden = true;
+  prescriptionRawDetails.open = false;
+  openPrescriptionImage.removeAttribute('href');
+  openPrescriptionImage.classList.add('hidden');
   uploadText.textContent = "Chụp ảnh đơn thuốc";
   removePrescriptionImage.classList.add("hidden");
   retryPrescriptionOcr.classList.add("hidden");
@@ -860,6 +868,9 @@ async function recognizePrescription(file) {
   const controller = new AbortController();
   prescriptionOcrController = controller;
   medicineInput.value = "";
+  prescriptionRawText.value = '';
+  prescriptionRawDetails.hidden = true;
+  prescriptionRawDetails.open = false;
   invalidatePrescriptionResults();
   setPrescriptionStatus("Đang tải công cụ và đọc ảnh đơn thuốc…", "reading");
   updatePrescriptionControls();
@@ -869,13 +880,20 @@ async function recognizePrescription(file) {
       onProgress: progress => {
         if (prescriptionOcrController === controller) setPrescriptionStatus(`Đang đọc tên thuốc… ${Math.round(progress * 100)}%`, "reading");
       },
+      onText: text => {
+        if (prescriptionOcrController !== controller) return;
+        prescriptionRawText.value = text;
+        prescriptionRawDetails.hidden = !text.trim();
+      },
     });
     if (prescriptionOcrController !== controller) return;
     medicineInput.value = medicines.map(medicineLabel).join("\n");
     prescriptionReviewItems = new Map(medicines.map(item => [medicineLabel(item), item]));
     const uncertain = medicines.filter(item => item.needsReview).length;
+    const numbers = [...new Set(medicines.flatMap(item => item.rowNumbers || []))].sort((a,b)=>a-b);
+    const gap = numbers.length > 1 && numbers[0] === 1 && numbers.at(-1) <= 30 && numbers.some((number,index)=>number !== index+1);
     setPrescriptionStatus(medicines.length
-      ? `Đã nhận diện ${medicines.length} loại thuốc.${uncertain ? ` Có ${uncertain} dòng chưa chắc chắn, cần đối chiếu ảnh gốc.` : ""} Hãy kiểm tra tên, hàm lượng và xác nhận danh sách.`
+      ? `Đã nhận diện ${medicines.length} loại thuốc.${uncertain ? ` Có ${uncertain} dòng chưa chắc chắn, cần đối chiếu ảnh gốc.` : ""}${gap ? ' Số thứ tự chưa liên tục; hãy kiểm tra các dòng có thể bị thiếu trong ảnh gốc.' : ''} Hãy kiểm tra đủ các dòng, tên, hàm lượng và xác nhận danh sách.`
       : "Chưa nhận diện được thuốc. Hãy chụp ảnh rõ hơn hoặc nhập tên thuốc bên dưới.", medicines.length ? "ready" : "error");
   } catch (error) {
     if (prescriptionOcrController !== controller) return;
@@ -902,6 +920,8 @@ addListener(fileInput, "change", () => {
   prescriptionImageUrl = URL.createObjectURL(file);
   uploadText.textContent = file.name;
   preview.src = prescriptionImageUrl;
+  openPrescriptionImage.href = prescriptionImageUrl;
+  openPrescriptionImage.classList.remove('hidden');
   preview.style.display = "block";
   removePrescriptionImage.classList.remove("hidden");
   retryPrescriptionOcr.classList.remove("hidden");
