@@ -138,9 +138,10 @@ class PharmacySearchTests(unittest.TestCase):
                 # Simulate OCR only in deterministic UI tests. The optional real-engine test uses original assets.
                 route.fulfill(content_type="text/javascript", body="""
 window.Tesseract = {createWorker: async () => ({
-  recognize: async () => {
+  recognize: async (image,options) => {
     if (window.failPrescriptionOcr) throw new Error('Unreadable image');
     window.prescriptionOcrPasses = (window.prescriptionOcrPasses || 0) + 1;
+    (window.prescriptionOcrOptions ||= []).push(options);
     const readings = %s;
     const result = {data: readings ? readings[Math.min(window.prescriptionOcrPasses-1,readings.length-1)] : {text: %s, confidence: %s}};
     if (window.holdPrescriptionOcr) return new Promise(resolve => {window.finishPrescriptionOcr = () => resolve(result)});
@@ -770,6 +771,32 @@ window.Tesseract = {createWorker: async () => ({
         expect(self.page.locator('#prescriptionButton')).to_be_disabled()
         expect(self.page.locator('#prescriptionRawDetails')).to_be_visible()
 
+    def test_printed_prescription_layouts_are_filtered_without_losing_kdnt_medicines(self):
+        fixtures=json.loads((ROOT.parent/'tests/fixtures/printed-prescription-layouts.json').read_text())
+        for fixture in fixtures:
+            with self.subTest(layout=fixture['id']):
+                self.ocr_text=fixture['text']
+                self.page.reload(wait_until='networkidle')
+                self.upload_prescription()
+                expect(self.page.locator('#medicineInput')).to_have_value('\n'.join(fixture['expected']))
+                expect(self.page.locator('#prescriptionMedicines li')).to_have_count(len(fixture['expected']))
+                expect(self.page.locator('#prescriptionButton')).to_be_disabled()
+
+    def test_medicine_region_is_read_again_to_recover_rows_missing_from_whole_page(self):
+        fixture=json.loads((ROOT.parent/'tests/fixtures/printed-prescription-layouts.json').read_text())[1]
+        line=lambda text,y: {'text':text,'confidence':94,'bbox':{'x0':20,'y0':y,'x1':500,'y1':y+20}}
+        partial={'lines':[line('Chỉ định dùng thuốc:',100),line('1. Althax [KDNT] 120mg',150),
+            line('5. Cefimed 400mg',500),line('Lời dặn của bác sĩ:',700)]}
+        self.ocr_readings=[partial,partial,partial,{'text':fixture['text'],'confidence':94},{'text':fixture['text'],'confidence':95}]
+        self.upload_prescription()
+        expect(self.page.locator('#medicineInput')).to_have_value('\n'.join(fixture['expected']))
+        self.assertEqual(self.page.evaluate('window.prescriptionOcrPasses'),5)
+        options=self.page.evaluate('window.prescriptionOcrOptions')
+        self.assertIsNone(options[0].get('rectangle'))
+        self.assertGreater(options[3]['rectangle']['top'],0)
+        self.assertLess(options[3]['rectangle']['height'],900)
+        expect(self.page.locator('#prescriptionButton')).to_be_disabled()
+
     def test_remove_image_during_ocr_discards_late_results_and_allows_same_file(self):
         self.page.evaluate("""() => {
             window.holdPrescriptionOcr = true;
@@ -927,6 +954,48 @@ window.Tesseract = {createWorker: async () => ({
     def test_real_ocr_filters_clinic_address_and_hours_from_a_printed_image(self):
         self.printed_ocr_sample(['Paracetamol 500mg','Loratadine 10mg','Cetirizine 10mg','Metformin 500mg',
             'Omeprazole 20mg','Vitamin C 500mg'],document_noise=True)
+
+    @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
+    def test_real_ocr_reads_recreated_numbered_and_kdnt_printed_layouts(self):
+        # Generated raster fixtures from anonymized transcriptions; these are not the user's original photos.
+        fixtures=json.loads((ROOT.parent/'tests/fixtures/printed-prescription-layouts.json').read_text())
+        for fixture in fixtures:
+            with self.subTest(layout=fixture['id']):
+                self.real_ocr=True
+                self.page.reload(wait_until='networkidle')
+                self.page.locator('[data-tab="prescription"]').click()
+                image=self.page.evaluate(r"""text => {
+                    const paper=document.createElement('canvas');paper.width=1000;paper.height=1200;
+                    const ctx=paper.getContext('2d');
+                    const shadow=ctx.createLinearGradient(0,0,1000,0);
+                    shadow.addColorStop(0,'#cccccc');shadow.addColorStop(1,'#fafafa');
+                    ctx.fillStyle=shadow;ctx.fillRect(0,0,1000,1200);ctx.fillStyle='#111111';
+                    let y=40;
+                    for(const line of text.split('\n')){
+                        const numbered=/^\d\s*[./]/.test(line);
+                        ctx.font=numbered?'bold 20px Times New Roman':'17px Times New Roman';
+                        let row='';
+                        for(const word of line.split(' ')){
+                            if(ctx.measureText(row+' '+word).width>790){ctx.fillText(row,50,y);y+=25;row='';}
+                            row+=(row?' ':'')+word;
+                        }
+                        ctx.fillText(row,50,y);
+                        if(numbered){ctx.font='18px Times New Roman';ctx.fillText('X 30 Viên',850,y);}
+                        y+=28;
+                    }
+                    const photo=document.createElement('canvas');photo.width=740;photo.height=900;
+                    const output=photo.getContext('2d');output.fillStyle='#999999';output.fillRect(0,0,740,900);
+                    output.translate(22,8);output.rotate(1.1*Math.PI/180);output.drawImage(paper,0,0,700,840);
+                    return photo.toDataURL('image/jpeg',0.82).split(',')[1];
+                }""",fixture['text'])
+                self.page.locator('#prescriptionFile').set_input_files({'name':fixture['id']+'.jpg','mimeType':'image/jpeg','buffer':base64.b64decode(image)})
+                self.page.wait_for_function("document.querySelector('#prescriptionOcrStatus').dataset.state !== 'reading'",timeout=90000)
+                actual=self.page.locator('#medicineInput').input_value()
+                raw=self.page.locator('#prescriptionRawText').input_value()
+                self.assertEqual(len(actual.splitlines()),len(fixture['expected']),actual+'\n\n'+raw)
+                self.assertEqual([line.lower() for line in actual.splitlines()],[line.lower() for line in fixture['expected']],actual)
+                self.assertIn('Lần đọc 5',self.page.locator('#prescriptionRawText').input_value())
+                expect(self.page.locator('#prescriptionButton')).to_be_disabled()
 
     @unittest.skipUnless(os.environ.get("PRESCRIPTION_OCR_ASSET_DIR"), "Set PRESCRIPTION_OCR_ASSET_DIR to verified CDN engine/language assets")
     def test_real_ocr_recovers_tilted_low_contrast_rows_and_flags_ambiguous_name(self):
