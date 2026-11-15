@@ -192,8 +192,12 @@ window.Tesseract = {createWorker: async () => ({
         elif "nominatim.openstreetmap.org" in url:
             self.geocode_requests += 1
             route.fulfill(json=self.geocode)
+        elif "router.project-osrm.org/table/" in url:
+            count = len(parse_qs(urlparse(url).query)["destinations"][0].split(";"))
+            route.fulfill(json={"code": "Ok", "distances": [[1200 + index * 200 for index in range(count)]],
+                                "durations": [[300 + index * 30 for index in range(count)]]})
         elif "router.project-osrm.org" in url:
-            route.fulfill(json={"routes": [{"distance": 1200, "duration": 300, "geometry": {
+            route.fulfill(json={"code": "Ok", "routes": [{"distance": 1200, "duration": 300, "geometry": {
                 "type": "LineString", "coordinates": [[105.834, 21.028], [105.8341, 21.0281]]
             }}]})
         else:
@@ -234,7 +238,7 @@ window.Tesseract = {createWorker: async () => ({
         expect(self.page.locator("#map .leaflet-marker-icon")).to_have_count(3)
         expect(self.page.locator("#pharmacyResultSummary")).to_contain_text("3 nhà thuốc")
         self.page.locator(".route-button").first.click()
-        expect(self.page.locator("#status")).to_contain_text("1.20 km")
+        expect(self.page.locator("#routeStatus")).to_contain_text("1.20 km")
 
     def test_slow_primary_uses_backup_and_cancels_losing_request(self):
         self.page.clock.install()
