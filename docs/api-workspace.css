@@ -1,1 +1,58 @@
 .api-page{max-width:1120px;margin:24px auto;padding:0 20px;color:#182438}.api-page header{display:flex;justify-content:space-between;align-items:center;gap:20px}.api-page section{background:#fff;border:1px solid #e3e9f1;border-radius:14px;margin:20px 0;padding:24px}.api-page form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.api-page label{display:grid;gap:7px;font-size:14px}.api-page input,.api-page select{width:100%;padding:11px;border:1px solid #b9c9df;border-radius:7px}.api-page button{padding:10px 16px;border:0;background:#2563c9;color:white;border-radius:7px;margin:4px 5px 4px 0}.api-page button:disabled{opacity:.55;cursor:wait}.api-page article{padding:15px 0;border-top:1px solid #e3e9f1}.api-page small{color:#5c6c82}.api-page [role=status]{white-space:pre-line}.api-page .full{grid-column:1/-1}.api-page code{overflow-wrap:anywhere}.api-page .notice{padding:12px;background:#eff5ff;border-radius:8px}.api-page .hidden{display:none!important}@media(max-width:600px){.api-page form{grid-template-columns:1fr}.api-page header{align-items:flex-start;flex-direction:column}}
+
+/* Customer storefront, multi-pharmacy cart and order tracking */
+.api-shopping-panel{margin:24px 0;padding:24px;border:1px solid #e3e9e7;border-radius:20px;background:#fff}
+.api-section-heading,.api-storefront-heading,.api-cart-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.api-section-heading h2,.api-storefront-heading h3,.api-cart-heading h3{margin:4px 0 6px;color:#153b32}
+.api-section-heading p,.api-storefront-heading p{margin:0;color:#66756f}
+.api-store-search{display:grid;gap:8px;margin:20px 0}
+.api-store-search label,.api-checkout-form label{font-weight:600;color:#29463d}
+.api-store-search>div{display:flex;gap:10px}
+.api-store-search input,.api-checkout-form input{width:100%;min-width:0;padding:12px 14px;border:1px solid #d8e2de;border-radius:10px;font:inherit}
+.api-order-status{min-height:22px;color:#23745d}
+.api-store-grid,.api-product-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:16px 0}
+.api-store-card,.api-product-card{display:flex;gap:14px;align-items:center;padding:16px;border:1px solid #e5ece8;border-radius:15px;background:#fbfdfc}
+.api-store-icon,.api-product-symbol{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border-radius:13px;background:#e6f5ef;color:#16805f;font-size:24px;font-weight:700}
+.api-store-card h3,.api-product-card h4{margin:0 0 5px;color:#193d33}
+.api-store-card p,.api-product-card p{margin:0 0 10px;color:#687871;font-size:13px}
+.api-store-card .secondary-button{margin-top:4px}
+.api-storefront,.api-cart-panel{margin-top:24px;padding-top:20px;border-top:1px solid #e6ece9}
+.api-product-card{align-items:stretch;flex-direction:column}
+.api-product-info{flex:1}.api-product-info strong{color:#16805f}
+.api-product-card>.primary{width:100%}
+.api-prescription-note,.api-cart-hint{padding:12px 14px;border-radius:10px;background:#fff8e8;color:#775b20;font-size:13px}
+.api-cart-group{margin:18px 0;padding:16px;border:1px solid #e2eae6;border-radius:14px}
+.api-cart-group h4{margin:0 0 14px;color:#1b493b}
+.api-cart-row{display:grid;grid-template-columns:minmax(130px,1fr) auto auto;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #edf1ef}
+.api-cart-row small{display:block;color:#728078;margin-top:4px}
+.api-quantity{display:flex;align-items:center;gap:8px}
+.api-quantity button{width:30px;height:30px;border:1px solid #d7e3dd;border-radius:8px;background:#fff;color:#245b48;cursor:pointer}
+.api-quantity button:disabled{opacity:.4;cursor:not-allowed}
+.api-quantity .api-remove{width:auto;border:0;color:#b54747}
+.api-pharmacy-subtotal{text-align:right;color:#53655d}
+.api-checkout-form{display:grid;grid-template-columns:1fr 1fr auto;align-items:end;gap:12px;margin-top:14px}
+.api-checkout-form label{display:grid;gap:7px;font-size:13px}
+.api-cart-total{display:flex;justify-content:space-between;align-items:center;padding:16px 0;font-size:17px}
+.api-cart-total strong{color:#13805d;font-size:20px}
+.api-pagination{display:flex;gap:8px;margin-top:16px}
+.api-order-card{margin-bottom:14px}
+.api-status-pill{padding:6px 10px;border-radius:999px;background:#e8f5ef;color:#176b50;font-size:12px}
+.api-track-button{margin-top:12px}
+.api-order-tracking{margin-top:14px;padding:16px;border-radius:12px;background:#f7faf8}
+.api-tracking-summary{display:flex;justify-content:space-between;gap:12px}
+.api-tracking-summary b{color:#176b50}
+.api-tracking-steps{list-style:none;padding:12px 0 0;margin:0}
+.api-tracking-steps li{display:flex;gap:12px;min-height:54px;color:#87928c}
+.api-tracking-steps li>div{display:grid;gap:4px;padding-bottom:12px}
+.api-tracking-steps li.is-done{color:#27795d}
+.api-tracking-steps li.is-current b{color:#124b38}
+.api-tracking-steps small{font-size:12px;color:#75827b}
+.api-step-dot{width:12px;height:12px;flex:0 0 12px;margin-top:3px;border:2px solid #bdc9c2;border-radius:50%;background:#fff}
+.api-tracking-steps li.is-done .api-step-dot{border-color:#29956e;background:#29956e;box-shadow:inset 0 0 0 2px white}
+.api-tracking-items{padding-top:12px;border-top:1px solid #e2e9e5}
+.api-tracking-items p{margin:7px 0;color:#56665e;font-size:13px}
+.api-error{color:#b54747}
+@media(max-width:700px){.api-shopping-panel{padding:16px}.api-section-heading,.api-storefront-heading,.api-cart-heading{align-items:flex-start;flex-direction:column}.api-store-search>div{flex-direction:column}.api-cart-row{grid-template-columns:1fr;gap:8px}.api-checkout-form{grid-template-columns:1fr}.api-pharmacy-subtotal{text-align:left}}
+
+.auth-demo-hint{margin:10px 0 0;padding:10px 12px;border:1px dashed #b8cbed;border-radius:10px;background:#f5f9ff;color:#536780;font-size:12px;line-height:1.5}
+.auth-demo-hint b{color:#245fc5}

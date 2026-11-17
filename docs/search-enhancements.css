@@ -13,7 +13,7 @@
 .search-clear { position:absolute; top:50%; right:8px; transform:translateY(-50%); display:grid; place-items:center; width:25px; height:25px; padding:0; border:0; border-radius:50%; background:transparent; color:#64748b; font-size:21px; line-height:1; cursor:pointer; }
 .search-clear:hover { background:#e8eef7; color:#172033; }
 .search-clear.hidden { display:none; }
-.pharmacy-suggestions { top:auto; bottom:calc(100% + 8px); max-height:min(440px,60vh); overflow-y:auto; }
+.pharmacy-suggestions { max-height:min(440px,70vh); overflow-y:auto; }
 .suggestion-caption { margin:5px 9px 7px; color:#64748b; font-size:11px; font-weight:700; letter-spacing:.02em; }
 .pharmacy-suggestion { grid-template-columns:44px minmax(0,1fr); border:1px solid transparent; }
 .pharmacy-suggestion.is-active, .pharmacy-suggestion:hover, .pharmacy-suggestion:focus { background:#eff6ff; border-color:#dbeafe; outline:0; }
@@ -26,28 +26,100 @@
 .search-empty-state p { margin:5px 0 12px; color:#64748b; font-size:12px; line-height:1.5; }
 .search-empty-state a { color:#2563c9; font-size:12px; font-weight:700; text-decoration:none; }
 .search-empty-state a:hover { text-decoration:underline; }
-.pharmacy-name-search { margin-top:8px; width:100%; font-size:12px; padding:9px 12px; }
-.search-all-matches { width:100%; text-align:left; margin:6px 0; }
-.prescription-image-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-.prescription-status { max-width:540px; margin:12px auto; color:#334155; font-size:13px; line-height:1.6; }
-.prescription-status[data-state="error"] { color:#b91c1c; }
-.medicine-list-label { display:block; margin:12px auto 8px; font-weight:600; font-size:13px; }
-.prescription-medicines { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; padding:0; margin:12px auto; list-style:none; }
-.prescription-medicines li { border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; background:#f8fbff; color:#172033; font-size:13px; }
-.prescription-medicines li.needs-review { border-color:#f59e0b; background:#fffbeb; color:#92400e; }
-.prescription-raw { max-width:540px; margin:12px auto; padding:12px; border:1px solid #cbd5e1; border-radius:8px; background:#f8fafc; text-align:left; }
-.prescription-raw[hidden] { display:none; }
-.prescription-raw summary { color:#245bb0; font-size:13px; font-weight:600; cursor:pointer; }
-.prescription-raw label { display:block; margin:12px 0 8px; color:#475569; font-size:12px; line-height:1.6; }
-.prescription-raw textarea { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; background:white; color:#334155; font:12px/1.7 monospace; resize:vertical; }
-.prescription-image-actions a { text-decoration:none; }
-.prescription-confirm { display:flex; justify-content:center; align-items:flex-start; gap:8px; margin:16px auto; font-size:13px; line-height:1.6; }
-.prescription-confirm input { margin-top:4px; }
-#prescription #preview { width:auto; height:auto; max-width:100%; max-height:260px; object-fit:contain; }
-#prescription .filter-hint { max-width:540px; margin:0 auto; }
-.stock-match { display:block; margin-top:8px; color:#15803d; }
 @media (max-width:560px) {
-  .pharmacy-search, .pharmacy-search:focus-within { position:relative; right:auto; bottom:auto; width:100%; grid-column:1 / -1; grid-row:3; }
+  .pharmacy-search:focus-within { width:min(280px,80vw); }
   .pharmacy-search:focus-within input { width:100%; color:#172033; }
-  .pharmacy-suggestions { top:calc(100% + 8px); bottom:auto; width:100%; max-height:60vh; }
+  .pharmacy-suggestions { width:min(390px,90vw); max-height:60vh; }
+}
+
+/* Nhà thuốc test không có ảnh/địa chỉ: dùng ô chữ thay cho ảnh */
+.suggestion-avatar { display:grid; place-items:center; width:44px; height:44px; border-radius:10px; background:#e8f0fe; color:#2563c9; font-size:22px; font-weight:700; }
+.pharmacy-suggestion:not(:has(small)) .suggestion-copy { align-self:center; }
+
+/* Khi người dùng chạm/nhập vào ô tìm kiếm, đưa cả khung lên đầu màn hình để
+   danh sách gợi ý không bị khuất phía dưới bản đồ hoặc mép màn hình. */
+.pharmacy-search { z-index: 1200; }
+.pharmacy-suggestions { z-index: 1201; }
+.pharmacy-search.is-raised {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  bottom: auto;
+  max-height: calc(100dvh - 24px);
+}
+.pharmacy-search.is-raised .pharmacy-suggestions {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  width: 100%;
+  max-height: min(42dvh, 300px);
+  margin-top: 8px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+@media (max-width: 700px) {
+  .pharmacy-search.is-raised {
+    left: 50%; right: auto; transform: translateX(-50%);
+    width: min(420px, calc(100vw - 24px));
+  }
+}
+
+
+/* Google-like pharmacy suggestions: readable, spacious, and with a pinned demo entry. */
+.pharmacy-suggestions {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(560px, 72vh);
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(15, 35, 70, .16);
+}
+.pharmacy-suggestion {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  min-height: 62px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
+}
+.pharmacy-suggestion:hover,
+.pharmacy-suggestion:focus,
+.pharmacy-suggestion.is-active {
+  background: #f1f6ff;
+  transform: translateX(2px);
+}
+.pharmacy-suggestion img,
+.pharmacy-suggestion .suggestion-avatar {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.suggestion-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.suggestion-copy strong { color: #172b4d; font-size: 14px; }
+.suggestion-copy small { color: #64748b; font-size: 12px; }
+.suggestion-action { grid-column: 2; margin-top: -4px; color: #2563c9; font-size: 11px; font-weight: 650; }
+.pharmacy-suggestion-test {
+  margin-top: 8px;
+  padding-top: 13px;
+  border-top: 1px solid #e8edf5;
+  border-radius: 0 0 12px 12px;
+  background: #fbfcff;
+}
+.pharmacy-suggestion-test .suggestion-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f0fe;
+  color: #245fc5;
+  font-weight: 800;
+}
+.pharmacy-suggestion-test .suggestion-action { color: #7c8aa0; }
+@media (max-width: 560px) {
+  .pharmacy-suggestions { width: min(560px, calc(100vw - 24px)); }
 }

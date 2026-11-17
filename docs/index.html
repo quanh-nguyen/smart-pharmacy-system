@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="./style.css" />
     <link rel="stylesheet" href="./search-enhancements.css" />
     <link rel="stylesheet" href="./checkout.css" />
+    <link rel="stylesheet" href="./api-workspace.css" />
+    <link rel="stylesheet" href="./medicine-order.css" />
   </head>
   <body>
     <header>
@@ -38,7 +40,6 @@
             />
             <button class="search-clear hidden" id="pharmacySearchClear" type="button" aria-label="Xóa nội dung tìm kiếm" title="Xóa tìm kiếm">×</button>
           </div>
-          <button class="primary pharmacy-name-search" id="pharmacySearchButton" type="button">Tìm tất cả chi nhánh</button>
           <div class="pharmacy-suggestions hidden" id="pharmacySuggestions" role="listbox" aria-label="Gợi ý nhà thuốc"></div>
         </div>
       </div>
@@ -133,6 +134,7 @@
           <p class="filter-hint" id="roadDistanceHint">Đổi bán kính để tìm lại nhà thuốc. Khoảng cách hiển thị theo tuyến lái xe từ điểm bắt đầu, sắp xếp gần đến xa. Dữ liệu từ OpenStreetMap có thể chưa đầy đủ.</p>
         </div>
         <div id="map"></div>
+        <p class="filter-hint map-origin-hint" id="mapOriginHint">Sau khi tìm nhà thuốc theo địa chỉ và phạm vi, bấm trực tiếp lên bản đồ để chọn chính xác điểm xuất phát. Có thể kéo ghim để điều chỉnh vị trí.</p>
         <p class="route-status" id="routeStatus" role="status"></p>
 
         <div class="pharmacy-list" id="pharmacyList" role="region" aria-label="Danh sách nhà thuốc tìm được"></div>
@@ -145,6 +147,7 @@
           <a class="add-pharmacy-prompt-link" href="./add-pharmacy.html">Thêm nhà thuốc <span aria-hidden="true">→</span></a>
         </aside>
       </section>
+    <section class="order-lookup" id="orderLookup" aria-label="Tra cứu đơn thuốc"></section>
     </main>
 
     <section class="admin-login-screen hidden" id="adminLoginScreen">
@@ -169,6 +172,7 @@
           <button class="dashboard-tab active" data-dashboard-tab="pharmacyProfile">Thông tin hiệu thuốc</button>
           <button class="dashboard-tab" data-dashboard-tab="medicineManagement">Quản lý thuốc</button>
           <button class="dashboard-tab" data-dashboard-tab="orderManagement">Đơn thuốc & hóa đơn</button>
+          <button class="dashboard-tab" data-dashboard-tab="onlineOrders">Đơn đặt online <span class="oo-tab-badge" id="onlineOrderBadge" hidden>0</span></button>
         </div>
 
         <div class="dashboard-panel active" id="pharmacyProfile">
@@ -205,6 +209,7 @@
           <div class="management-list" id="medicineList"></div>
         </div>
 
+        <div class="dashboard-panel" id="onlineOrders"><div class="oo-alert" id="onlineOrderAlert" role="status" hidden></div><div id="onlineOrderList"></div></div>
         <div class="dashboard-panel" id="orderManagement">
           <form class="dashboard-form compact-form" id="orderForm">
             <div class="form-row form-row-three">
@@ -301,12 +306,13 @@
         </div>
         <form id="authForm">
           <div id="customerNameField" class="hidden"><label for="authCustomerName">Họ và tên</label><input id="authCustomerName" type="text" maxlength="100" autocomplete="name" placeholder="Nguyễn Văn A" /></div>
-          <label for="authEmail">Email</label>
-          <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email" required />
+          <label for="authEmail">Tên đăng nhập hoặc email</label>
+          <input id="authEmail" type="text" placeholder="Nhập tên đăng nhập hoặc email" autocomplete="username" required />
           <label for="authPassword">Mật khẩu</label>
-          <input id="authPassword" type="password" placeholder="Nhập mật khẩu" autocomplete="current-password" minlength="6" required />
+          <input id="authPassword" type="password" placeholder="Nhập mật khẩu" autocomplete="current-password" minlength="4" required />
           <button class="primary auth-submit" type="submit" id="authSubmit">Đăng nhập</button>
         </form>
+        <p class="auth-demo-hint">Tài khoản dùng thử: <b>test</b> · Mật khẩu: <b>test</b> (dùng được cho cả Khách hàng và Chủ cửa hàng)</p>
         <p class="auth-status" id="authStatus" role="status"></p>
       </div>
     </div>
@@ -413,6 +419,7 @@
 
     <footer>Hệ thống tìm nhà thuốc gần nhất</footer>
     <script src="./runtime-config.js"></script>
+    <script src="./test-accounts.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module" src="./app.js"></script>
   </body>

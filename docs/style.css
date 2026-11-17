@@ -787,3 +787,108 @@ footer {
   white-space: nowrap;
 }
 .customer-nav-greeting.hidden { display: none !important; }
+
+
+/* Responsive placement for the floating pharmacy search panel */
+@media (max-width: 700px) {
+  .pharmacy-search {
+    left: 50%;
+    right: auto;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(360px, calc(100vw - 24px));
+    box-sizing: border-box;
+  }
+  .pharmacy-search-control,
+  .pharmacy-search input {
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .pharmacy-search input { width: 100%; }
+  .pharmacy-suggestions {
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: min(38vh, 260px);
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+}
+
+
+/* Search card polish: clearer spacing, softer elevation and restrained motion */
+.pharmacy-search {
+  box-sizing: border-box;
+  padding: 18px 18px 17px;
+  border: 1px solid rgba(191, 211, 239, .9);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 16px 42px rgba(28, 60, 110, .14), 0 3px 10px rgba(28, 60, 110, .05);
+  animation: pharmacySearchFloat 6s ease-in-out infinite;
+  backdrop-filter: blur(10px);
+}
+.pharmacy-search label {
+  margin: 0 0 12px;
+  font-size: 14px;
+  letter-spacing: .005em;
+}
+.pharmacy-search-control { margin: 0 0 12px; }
+.pharmacy-search input {
+  display: block;
+  box-sizing: border-box;
+  min-height: 48px;
+  width: 100%;
+  padding: 12px 42px 12px 40px;
+  border-radius: 14px;
+  background-color: #f8fafc;
+  font-size: 14px;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease, transform .2s ease;
+}
+.pharmacy-search input:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 4px rgba(37, 99, 201, .11), 0 5px 14px rgba(37, 99, 201, .08);
+}
+.pharmacy-search .pharmacy-name-search {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  border-radius: 13px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  box-shadow: 0 5px 12px rgba(37, 99, 201, .16);
+  transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+}
+.pharmacy-search .pharmacy-name-search:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 17px rgba(37, 99, 201, .2);
+  filter: brightness(1.03);
+}
+.pharmacy-search .pharmacy-name-search:active { transform: translateY(0); }
+.pharmacy-suggestions {
+  top: calc(100% + 10px);
+  border-radius: 15px;
+  padding: 8px;
+  box-shadow: 0 18px 40px rgba(23, 32, 51, .18);
+  animation: pharmacySuggestionsIn .18s ease-out both;
+}
+.pharmacy-suggestion { gap: 12px; padding: 10px; border-radius: 10px; }
+@keyframes pharmacySearchFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes pharmacySuggestionsIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 640px) {
+  .pharmacy-search { right: 12px; bottom: 72px; width: min(390px, calc(100vw - 24px)); padding: 16px; }
+  .pharmacy-search-control { margin-bottom: 11px; }
+  .pharmacy-search .pharmacy-name-search { min-height: 46px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pharmacy-search, .pharmacy-suggestions { animation: none !important; }
+  .pharmacy-search input, .pharmacy-search .pharmacy-name-search { transition: none !important; }
+}
