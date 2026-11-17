@@ -1064,8 +1064,20 @@ document.querySelectorAll(".symptom-list button").forEach((button) => {
   });
 });
 
-addListener(widgetTrigger, "click", () => symptomWidget.classList.toggle("hidden"));
-addListener(document.querySelector("#closeWidget"), "click", () => symptomWidget.classList.add("hidden"));
+function syncSymptomWidgetVisibility() {
+  const isOpen = !symptomWidget.classList.contains("hidden");
+  document.body.classList.toggle("symptom-widget-open", isOpen);
+}
+
+addListener(widgetTrigger, "click", () => {
+  symptomWidget.classList.toggle("hidden");
+  syncSymptomWidgetVisibility();
+});
+addListener(document.querySelector("#closeWidget"), "click", () => {
+  symptomWidget.classList.add("hidden");
+  syncSymptomWidgetVisibility();
+});
+syncSymptomWidgetVisibility();
 
 
 let pharmacySearchBusy = false;

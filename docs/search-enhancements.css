@@ -123,3 +123,19 @@
 @media (max-width: 560px) {
   .pharmacy-suggestions { width: min(560px, calc(100vw - 24px)); }
 }
+
+
+/* Prevent the floating pharmacy-search card from covering the open symptom helper.
+   The user can reopen pharmacy search after closing the symptom helper. */
+body.symptom-widget-open .pharmacy-search {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateY(8px);
+}
+body.symptom-widget-open .symptom-widget {
+  z-index: 1300;
+}
+body.symptom-widget-open .widget-card {
+  z-index: 1301;
+}
