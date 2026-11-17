@@ -1,0 +1,24 @@
+[
+  {
+    "id": "numbered_slash_rows_and_aliases",
+    "text": "BỘ Y TẾ\nBỆNH VIỆN DA LIỄU\nĐƠN THUỐC\nHọ và tên bệnh nhân:\nTuổi: 46 Nam\nThuốc điều trị:\n1 / Cetirizine 10mg (Cetimed 10mg)\nmỗi tối uống 1 viên\n2 / Liverterder 250mg + 250mg (L-cystin 250mg + Cholin hydrotartrat\n250mg)\nngày uống 2 viên chia 2 lần sau ăn\n3 / Thymomodulin 80mg (Rolspain 80mg)\nngày uống 2 viên chia 2 lần sau ăn\n4 / Betamethason Dipropionate (Lotusalic 15g)\nbôi sáng, tối trong 3 ngày, sau đó bôi tối trong 5 ngày\nLời dặn của bác sĩ\nGhi chú:\nDùng theo chỉ dẫn, nếu có bất thường đến bệnh viện khám lại\nhoặc liên hệ theo số điện thoại trên đơn\nHà Nội, ngày 29 tháng 8 năm 2019\nKhi khám lại xin mang theo đơn này.",
+    "expected": [
+      "Cetirizine 10mg",
+      "Liverterder 250mg+250mg",
+      "Thymomodulin 80mg",
+      "Betamethason Dipropionate (Lotusalic) 15g"
+    ]
+  },
+  {
+    "id": "kdnt_labels_and_wrapped_compounds",
+    "text": "BỘ QUỐC PHÒNG\nBỆNH VIỆN QUÂN Y\nĐƠN THUỐC\nHọ tên:\nĐối tượng: Khám theo yêu cầu\nSinh hiệu: HA: 133/80 mmHg LV 82 lần/phút T: 36.40 oC CN 68.00kg\nChỉ định dùng thuốc:\n1. Althax [KDNT] 120mg (Fexofenadin)\nCách dùng: Uống sau ăn\nSáng: 1 Chiều: 1\n2. Dexlanzol MR 30 [KDNT] 30mg (Dexlansoprazole)\nCách dùng: Uống trước ăn 30 phút\n3. Banitase [KDNT] 100mg + 25mg + 150mg + 50mg\n+ 300mg (Trimebutin maleat + Dehydrocholic acid)\nCách dùng: Uống trước ăn 30 phút\n4. Gastec [KDNT] (20mg + 582mg + 196mg)/10ml\n(Oxetacain + Nhôm hydroxyd gel khô + Magnesi hydroxyd)\nCách dùng: Uống trước ăn 30 phút\n5. Cefimed 400mg [KDNT] 400mg (Cefixim)\nCách dùng: Uống sau ăn\n6. Atillute [KDNT] 50mg/ml - 10ml (Carbocistein)\nCách dùng: Uống\nSáng: 1 Chiều: 1 Tối: 1\nKhi tái khám nhớ đem theo đơn thuốc này",
+    "expected": [
+      "Althax 120mg",
+      "Dexlanzol MR 30 30mg",
+      "Banitase 100mg+25mg+150mg+50mg+300mg",
+      "Gastec 20mg+582mg+196mg/10ml",
+      "Cefimed 400mg",
+      "Atillute 50mg/ml"
+    ]
+  }
+]

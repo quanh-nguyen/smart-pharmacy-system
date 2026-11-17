@@ -13,7 +13,7 @@
 .search-clear { position:absolute; top:50%; right:8px; transform:translateY(-50%); display:grid; place-items:center; width:25px; height:25px; padding:0; border:0; border-radius:50%; background:transparent; color:#64748b; font-size:21px; line-height:1; cursor:pointer; }
 .search-clear:hover { background:#e8eef7; color:#172033; }
 .search-clear.hidden { display:none; }
-.pharmacy-suggestions { max-height:min(440px,70vh); overflow-y:auto; }
+.pharmacy-suggestions { top:auto; bottom:calc(100% + 8px); max-height:min(440px,60vh); overflow-y:auto; }
 .suggestion-caption { margin:5px 9px 7px; color:#64748b; font-size:11px; font-weight:700; letter-spacing:.02em; }
 .pharmacy-suggestion { grid-template-columns:44px minmax(0,1fr); border:1px solid transparent; }
 .pharmacy-suggestion.is-active, .pharmacy-suggestion:hover, .pharmacy-suggestion:focus { background:#eff6ff; border-color:#dbeafe; outline:0; }
@@ -26,8 +26,28 @@
 .search-empty-state p { margin:5px 0 12px; color:#64748b; font-size:12px; line-height:1.5; }
 .search-empty-state a { color:#2563c9; font-size:12px; font-weight:700; text-decoration:none; }
 .search-empty-state a:hover { text-decoration:underline; }
+.pharmacy-name-search { margin-top:8px; width:100%; font-size:12px; padding:9px 12px; }
+.search-all-matches { width:100%; text-align:left; margin:6px 0; }
+.prescription-image-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+.prescription-status { max-width:540px; margin:12px auto; color:#334155; font-size:13px; line-height:1.6; }
+.prescription-status[data-state="error"] { color:#b91c1c; }
+.medicine-list-label { display:block; margin:12px auto 8px; font-weight:600; font-size:13px; }
+.prescription-medicines { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; padding:0; margin:12px auto; list-style:none; }
+.prescription-medicines li { border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; background:#f8fbff; color:#172033; font-size:13px; }
+.prescription-medicines li.needs-review { border-color:#f59e0b; background:#fffbeb; color:#92400e; }
+.prescription-raw { max-width:540px; margin:12px auto; padding:12px; border:1px solid #cbd5e1; border-radius:8px; background:#f8fafc; text-align:left; }
+.prescription-raw[hidden] { display:none; }
+.prescription-raw summary { color:#245bb0; font-size:13px; font-weight:600; cursor:pointer; }
+.prescription-raw label { display:block; margin:12px 0 8px; color:#475569; font-size:12px; line-height:1.6; }
+.prescription-raw textarea { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; background:white; color:#334155; font:12px/1.7 monospace; resize:vertical; }
+.prescription-image-actions a { text-decoration:none; }
+.prescription-confirm { display:flex; justify-content:center; align-items:flex-start; gap:8px; margin:16px auto; font-size:13px; line-height:1.6; }
+.prescription-confirm input { margin-top:4px; }
+#prescription #preview { width:auto; height:auto; max-width:100%; max-height:260px; object-fit:contain; }
+#prescription .filter-hint { max-width:540px; margin:0 auto; }
+.stock-match { display:block; margin-top:8px; color:#15803d; }
 @media (max-width:560px) {
-  .pharmacy-search:focus-within { width:min(280px,80vw); }
+  .pharmacy-search, .pharmacy-search:focus-within { position:relative; right:auto; bottom:auto; width:100%; grid-column:1 / -1; grid-row:3; }
   .pharmacy-search:focus-within input { width:100%; color:#172033; }
-  .pharmacy-suggestions { width:min(390px,90vw); max-height:60vh; }
+  .pharmacy-suggestions { top:calc(100% + 8px); bottom:auto; width:100%; max-height:60vh; }
 }

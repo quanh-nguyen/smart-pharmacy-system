@@ -1,4 +1,5 @@
-import { apiRequest, allPages } from './api-client.js';
+import { apiRequest, allPages, getSession } from './api-client.js';
+import { showApiInvoice } from './checkout.js';
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const labels = { pending: 'Chờ xác nhận', confirmed: 'Đã xác nhận', preparing: 'Đang chuẩn bị',
   delivering: 'Đang giao', completed: 'Hoàn tất', rejected: 'Đã từ chối', cancelled: 'Đã hủy' };
@@ -12,7 +13,7 @@ export async function renderApiHistory(page = 1) {
       <div class="customer-order-top"><strong>Đơn #${order.id}</strong><span>${escape(labels[order.status] || order.status)}</span></div>
       <p>${escape(order.pharmacy?.name)}</p><p>${escape(order.shippingAddress)}</p>
       <div class="customer-order-bottom"><span>${new Date(order.createdAt).toLocaleString('vi-VN')}</span>
-      <strong>${Number(order.totalAmount).toLocaleString('vi-VN')} VNĐ</strong></div></article>`).join('')
+      <strong>${Number(order.totalAmount).toLocaleString('vi-VN')} VNĐ</strong><button class="row-action" type="button" data-api-invoice="${escape(order.id)}">Xem hóa đơn</button></div></article>`).join('')
       : '<p>Bạn chưa có đơn hàng nào.</p>';
     const navigation = document.createElement('div');
     for (const [title, next, show] of [['Trang trước', page - 1, page > 1], ['Trang sau', page + 1, page * 20 < data.total]]) {
@@ -21,6 +22,17 @@ export async function renderApiHistory(page = 1) {
       button.onclick = () => renderApiHistory(next); navigation.append(button);
     }
     target.append(navigation);
+    target.querySelectorAll('[data-api-invoice]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const order = await apiRequest(`/api/orders/${encodeURIComponent(button.dataset.apiInvoice)}`);
+        showApiInvoice({ ...order, invoiceStatus: labels[order.status] || order.status }, getSession()?.user);
+      } catch (error) {
+        let message = button.closest('article').querySelector('[role=alert]');
+        if (!message) { message = document.createElement('p'); message.setAttribute('role', 'alert'); button.closest('article').append(message); }
+        message.textContent = error.message;
+      } finally { button.disabled = false; }
+    }));
   } catch (error) {
     target.textContent = error.status === 401 ? 'Phiên đã hết hạn. Vui lòng đăng nhập lại.' : error.message;
   }
@@ -73,6 +85,7 @@ export function setupCustomerOrdering() {
           } });
           status.textContent = `Đã tạo đơn #${order.id}.`; await renderApiHistory();
           await loadInventory(store);
+          showApiInvoice({ ...order, invoiceStatus: labels[order.status] || order.status }, getSession()?.user);
         } catch (error) { status.textContent = error.message; submit.disabled = false; }
       });
     } catch (error) { target.textContent = error.message; }
