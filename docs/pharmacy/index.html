@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quản lý hiệu thuốc | Smart Pharmacy</title>
   <link rel="stylesheet" href="./style.css">
-  <script src="../runtime-config.js"></script><script type="module" src="./entry.js"></script>
+  <script src="../test-accounts.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="../runtime-config.js"></script><script type="module" src="./entry.js"></script>
 </head>
 <body>
 
@@ -14,7 +15,7 @@
       <a class="auth-brand" href="../index.html"><span class="brand-mark">+</span><span>Smart<span class="brand-light">Pharmacy</span></span></a>
       <p class="eyebrow">KHU VỰC CHỦ HIỆU THUỐC</p>
       <h1 id="authHeading">Đăng nhập quản lý hiệu thuốc</h1>
-      <p class="auth-description">Đăng nhập hoặc tạo tài khoản để quản lý thông tin cửa hàng và kho thuốc.</p>
+      <p class="auth-description">Đăng nhập hoặc tạo tài khoản để cập nhật thông tin liên hệ và địa chỉ nhà thuốc.</p>
       <div class="auth-tabs" role="tablist" aria-label="Đăng nhập hoặc đăng ký">
         <button class="auth-tab active" id="loginTab" type="button" role="tab" aria-selected="true">Đăng nhập</button>
         <button class="auth-tab" id="registerTab" type="button" role="tab" aria-selected="false">Đăng ký</button>
@@ -40,8 +41,10 @@
       <div class="sidebar-label">QUẢN LÝ CỬA HÀNG</div>
       <nav class="side-nav" aria-label="Điều hướng quản lý">
         <button class="nav-item active" data-view="overview"><span class="nav-icon">▦</span>Tổng quan</button>
-        <button class="nav-item" data-view="medicines"><span class="nav-icon">▤</span>Kho thuốc</button>
+        
+        
         <button class="nav-item" data-view="profile"><span class="nav-icon">⌂</span>Thông tin hiệu thuốc</button>
+        <button class="nav-item" data-view="messages"><span class="nav-icon">▣</span>Tin nhắn</button>
       </nav>
       <div class="sidebar-bottom">
         <div class="local-note"><span class="note-dot"></span><div><strong>Bản giao diện thử nghiệm</strong><small>Dữ liệu lưu trên trình duyệt này</small></div></div>
@@ -57,31 +60,11 @@
 
       <section class="view active" id="view-overview">
         <div class="welcome-card">
-          <div><p class="welcome-kicker">SMART PHARMACY</p><h2 id="welcomeTitle">Chào mừng đến với khu vực quản lý</h2><p>Quản lý thông tin hiệu thuốc và theo dõi danh mục thuốc tại một nơi.</p><button class="button button-white" data-go="medicines">Quản lý kho thuốc <span>→</span></button></div>
+          <div><p class="welcome-kicker">SMART PHARMACY</p><h2 id="welcomeTitle">Chào mừng đến với khu vực quản lý</h2><p>Cập nhật thông tin để khách hàng có thể tìm thấy và liên hệ với nhà thuốc.</p><button class="button button-white" data-go="profile">Cập nhật thông tin <span>→</span></button></div>
           <div class="welcome-art" aria-hidden="true"><div class="art-cross">+</div><div class="art-pill pill-one"></div><div class="art-pill pill-two"></div><div class="art-circle"></div></div>
         </div>
-        <div class="section-heading"><div><h2>Tình hình kho thuốc</h2><p>Các chỉ số được tính từ danh mục thuốc hiện có.</p></div><button class="button button-primary" data-action="add-medicine">＋ Thêm thuốc</button></div>
-        <div class="stats-grid">
-          <article class="stat-card"><div class="stat-top"><span class="stat-icon blue">▤</span><span class="stat-caption">DANH MỤC</span></div><strong id="statKinds">0</strong><p>Loại thuốc</p></article>
-          <article class="stat-card"><div class="stat-top"><span class="stat-icon green">▣</span><span class="stat-caption">TỒN KHO</span></div><strong id="statUnits">0</strong><p>Tổng số đơn vị</p></article>
-          <article class="stat-card"><div class="stat-top"><span class="stat-icon orange">!</span><span class="stat-caption">CẦN KIỂM TRA</span></div><strong id="statLow">0</strong><p>Thuốc sắp hết (≤ 10)</p></article>
-          <article class="stat-card"><div class="stat-top"><span class="stat-icon purple">₫</span><span class="stat-caption">GIÁ TRỊ ƯỚC TÍNH</span></div><strong id="statValue">0 ₫</strong><p>Giá bán × số lượng</p></article>
-        </div>
-        <section class="content-card">
-          <div class="card-heading"><div><h2>Thuốc cần chú ý</h2><p>Thuốc sắp hết hoặc đã hết hàng.</p></div><button class="text-button" data-go="medicines">Xem kho thuốc →</button></div>
-          <div id="attentionList" class="attention-list"></div>
-        </section>
-        <p class="disclaimer">Lưu ý: Đây là giao diện front-end minh họa. Dữ liệu được lưu bằng localStorage của trình duyệt, chưa đồng bộ với máy chủ hoặc tài khoản khác.</p>
-      </section>
-
-      <section class="view" id="view-medicines">
-        <div class="section-heading inventory-heading"><div><h2>Danh mục thuốc</h2><p>Thêm, tìm kiếm, cập nhật và xóa thuốc trong kho.</p></div><button class="button button-primary" data-action="add-medicine">＋ Thêm thuốc mới</button></div>
-        <div class="content-card inventory-card">
-          <div class="filters"><label class="search-box"><span>⌕</span><input id="medicineSearch" type="search" placeholder="Tìm theo mã, tên hoặc hoạt chất..."></label><select id="categoryFilter" aria-label="Lọc theo nhóm thuốc"><option value="all">Tất cả nhóm thuốc</option></select><select id="stockFilter" aria-label="Lọc theo tồn kho"><option value="all">Mọi trạng thái kho</option><option value="available">Còn hàng</option><option value="low">Sắp hết (≤ 10)</option><option value="empty">Hết hàng</option></select></div>
-          <div class="table-meta"><span id="resultCount">0 loại thuốc</span><button class="text-button" id="resetFilters">Xóa bộ lọc</button></div>
-          <div class="table-wrap"><table><thead><tr><th>MÃ THUỐC</th><th>TÊN THUỐC</th><th>NHÓM</th><th>ĐƠN GIÁ</th><th>TỒN KHO</th><th>HẠN DÙNG</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="medicineTableBody"></tbody></table></div>
-          <div class="empty-state hidden" id="emptyMedicines"><div class="empty-icon">▤</div><h3>Chưa có thuốc phù hợp</h3><p>Thử đổi từ khóa hoặc thêm thuốc mới vào danh mục.</p><button class="button button-primary" data-action="add-medicine">＋ Thêm thuốc</button></div>
-        </div>
+        <section class="content-card profile-card"><div class="profile-intro"><div class="profile-logo">✚</div><div><h2>Thông tin kết nối</h2><p>Hãy cập nhật số điện thoại và địa chỉ chính xác để khách hàng có thể gọi hoặc nhắn tin hỏi thông tin thuốc.</p></div></div><button class="button button-primary" data-go="profile">Cập nhật hồ sơ nhà thuốc</button></section>
+        <p class="disclaimer">Hệ thống hỗ trợ kết nối khách hàng với nhà thuốc. Tình trạng thuốc và giá bán được nhà thuốc trao đổi trực tiếp với khách hàng qua điện thoại hoặc tin nhắn.</p>
       </section>
 
       <section class="view" id="view-profile">
@@ -90,6 +73,8 @@
           <form id="profileForm" class="form-grid">
             <div class="field full"><label for="profileName">Tên hiệu thuốc <span>*</span></label><input id="profileName" maxlength="120" required placeholder="Ví dụ: Nhà thuốc Minh Tâm"></div>
             <div class="field full"><label for="profileAddress">Địa chỉ <span>*</span></label><input id="profileAddress" maxlength="250" required placeholder="Số nhà, đường, phường/xã, quận/huyện"></div>
+            <div class="field full"><label>Chọn vị trí chính xác trên bản đồ <span>*</span></label><div id="pharmacyLocationMap" style="height:300px;border:1px solid #d7e0eb;border-radius:10px;overflow:hidden"></div><small>Bấm lên bản đồ để đặt ghim tại vị trí nhà thuốc. Có thể kéo ghim để điều chỉnh.</small><input id="profileLat" type="hidden"><input id="profileLng" type="hidden"><span id="profileCoordinates" class="field-hint">Chưa chọn vị trí.</span><div class="existing-pharmacy-match" style="margin-top:12px;padding:12px;border:1px solid #dce6f4;border-radius:10px;background:#f8fbff"><strong>Nhà thuốc đã có trên bản đồ?</strong><p style="margin:6px 0 10px;font-size:12px;color:#64748b">Chọn nhà thuốc trùng khớp nếu đã có trong danh sách bản đồ. Trường hợp này sẽ liên kết với nhà thuốc hiện hữu, không tạo bản ghi mới và không cần Admin duyệt bổ sung.</p><select id="existingPharmacyMatch" style="width:100%;padding:10px;border:1px solid #d7e0eb;border-radius:8px"><option value="">Đang kiểm tra nhà thuốc gần vị trí đã chọn…</option></select><small id="existingPharmacyMatchNote" class="field-hint">Nếu không tìm thấy nhà thuốc phù hợp, để trống và gửi hồ sơ bổ sung để Admin duyệt.</small></div></div>
+            <div class="field full"><label for="profilePhoto">Ảnh mặt tiền / bảng hiệu nhà thuốc <span>*</span></label><input id="profilePhoto" type="file" accept="image/*"><small>Ảnh dùng để Admin xác minh nhà thuốc. Tối đa 2 MB.</small><img id="profilePhotoPreview" alt="Ảnh nhà thuốc xem trước" style="display:none;max-width:260px;max-height:180px;object-fit:cover;border-radius:10px"></div>
             <div class="field"><label for="profilePhone">Số điện thoại</label><input id="profilePhone" type="tel" maxlength="20" placeholder="Ví dụ: 0901234567"></div>
             <div class="field"><label for="profileHours">Giờ mở cửa</label><input id="profileHours" maxlength="100" placeholder="Ví dụ: 07:00 – 22:00"></div>
             <div class="field full"><label for="profileDescription">Giới thiệu ngắn</label><textarea id="profileDescription" rows="3" maxlength="500" placeholder="Thông tin giới thiệu về hiệu thuốc..."></textarea></div>
@@ -97,6 +82,7 @@
           </form>
         </div>
       </section>
+      <section class="view" id="view-messages"><div class="section-heading"><div><h2>Tin nhắn khách hàng</h2><p>Danh sách hội thoại demo với khách hàng.</p></div></div><div class="content-card" style="padding:18px"><p class="demo-note">Đây là hộp thư DEMO. Tin nhắn chưa được đồng bộ giữa các tài khoản hoặc thiết bị.</p><div id="pharmacyMessengerList"></div><div id="pharmacyMessengerThread" style="margin-top:14px"></div></div></section>
     </main>
   </div>
 

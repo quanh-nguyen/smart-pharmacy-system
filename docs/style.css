@@ -892,3 +892,96 @@ footer {
   .pharmacy-search, .pharmacy-suggestions { animation: none !important; }
   .pharmacy-search input, .pharmacy-search .pharmacy-name-search { transition: none !important; }
 }
+
+
+/* Mobile: keep the symptom-assistance launcher fixed to the bottom-right
+   viewport corner, independent of page scroll position. */
+@media (max-width: 768px) {
+  .symptom-widget {
+    position: fixed !important;
+    right: max(12px, env(safe-area-inset-right)) !important;
+    bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    left: auto !important;
+    top: auto !important;
+    z-index: 1400 !important;
+    width: auto !important;
+    max-width: calc(100vw - 24px);
+    margin: 0 !important;
+    transform: none !important;
+  }
+
+  .symptom-widget .widget-trigger {
+    max-width: calc(100vw - 24px);
+    min-height: 48px;
+    padding: 11px 15px;
+    white-space: nowrap;
+    box-shadow: 0 8px 22px rgba(37, 99, 201, .30);
+  }
+
+  .symptom-widget .widget-card {
+    position: absolute !important;
+    right: 0 !important;
+    left: auto !important;
+    bottom: calc(100% + 10px) !important;
+    top: auto !important;
+    width: min(380px, calc(100vw - 24px)) !important;
+    max-height: min(68vh, 520px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+/* The product scope is pharmacy discovery and direct contact, not inventory or online checkout. */
+.order-demo-prompt, #checkoutHistoryButton, #checkoutDialog, #checkoutReviewDialog, #invoiceDialog, #checkoutHistoryDialog, #checkoutFeedback { display: none !important; }
+.owner-dashboard [data-dashboard-tab="medicineManagement"], .owner-dashboard [data-dashboard-tab="orderManagement"], .owner-dashboard [data-dashboard-tab="onlineOrders"], .owner-dashboard #medicineManagement, .owner-dashboard #orderManagement, .owner-dashboard #onlineOrders { display: none !important; }
+.pharmacy-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.pharmacy-actions a { text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+.pharmacy-phone, .pharmacy-phone-unavailable { display:inline-block; margin-top:4px; }
+.contact-unavailable { font-size:12px; color:#68758a; }
+
+
+/* Messenger-style inbox and local-only demo conversations. */
+.contact-chat { cursor:pointer; gap:7px; }
+.messenger-dialog { width:min(920px, calc(100vw - 28px)); height:min(690px, calc(100dvh - 32px)); max-height:calc(100dvh - 32px); max-width:none; padding:0; border:0; border-radius:18px; overflow:hidden; box-shadow:0 24px 80px rgba(15,23,42,.28); }
+.messenger-dialog::backdrop { background:rgba(15,23,42,.48); backdrop-filter:blur(2px); }
+.messenger-shell { display:grid; grid-template-columns:290px minmax(0,1fr); width:100%; height:100%; min-height:0; }
+.messenger-inbox { min-width:0; border-right:1px solid #e2e8f0; background:#fff; display:flex; flex-direction:column; overflow:hidden; }
+.messenger-inbox-top { display:flex; align-items:center; justify-content:space-between; padding:18px 16px 14px; border-bottom:1px solid #edf1f6; }
+.messenger-inbox-top .tag { margin:0 0 4px; font-size:10px; letter-spacing:.1em; color:#2873bf; }
+.messenger-inbox-top h2 { margin:0; font-size:20px; color:#172b46; }
+.messenger-unread-total,.messenger-unread-count { display:inline-grid; place-items:center; min-width:21px; height:21px; padding:0 6px; border-radius:20px; background:#e53958; color:white; font-size:11px; font-weight:700; }
+.messenger-conversation-list { overflow:auto; padding:6px; }
+.messenger-empty-inbox { padding:22px 14px; color:#718096; font-size:12px; line-height:1.5; text-align:center; }
+.messenger-conversation { display:flex; align-items:center; gap:10px; width:100%; padding:11px 9px; border:0; border-radius:12px; background:transparent; text-align:left; cursor:pointer; }
+.messenger-conversation:hover,.messenger-conversation.is-active { background:#edf5ff; }
+.messenger-list-avatar { display:grid; place-items:center; flex:0 0 40px; width:40px; height:40px; border-radius:50%; background:#e5f1ff; color:#1767c5; font-size:20px; }
+.messenger-conversation-copy { display:flex; flex:1; flex-direction:column; min-width:0; gap:4px; }
+.messenger-conversation-copy strong { overflow:hidden; color:#1f3048; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.messenger-conversation-copy small { overflow:hidden; color:#718096; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.messenger-conversation-meta { display:flex; flex-direction:column; align-items:flex-end; gap:6px; color:#8a96a8; font-size:10px; }
+.messenger-thread { display:flex; flex-direction:column; min-width:0; min-height:0; background:#f1f5f9; }
+.messenger-header { display:flex; align-items:center; gap:12px; padding:15px 17px; color:#fff; background:linear-gradient(135deg,#1767c5,#2788db); }
+.messenger-avatar { display:grid; place-items:center; width:42px; height:42px; flex:0 0 42px; border-radius:50%; background:#fff; color:#1767c5; font-size:24px; font-weight:800; }
+.messenger-heading-copy { min-width:0; flex:1; }
+.messenger-heading-copy h2 { margin:0; font-size:16px; color:#fff; }
+.messenger-heading-copy p { margin:3px 0; color:rgba(255,255,255,.86); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.messenger-status { font-size:10px; color:#e0f2fe; }
+.messenger-close { border:0; background:transparent; color:#fff; font-size:28px; cursor:pointer; }
+.messenger-messages { display:flex; flex:1; flex-direction:column; gap:9px; min-height:0; padding:16px; overflow:auto; }
+.messenger-empty-thread { margin:auto; max-width:260px; color:#7b8798; font-size:13px; line-height:1.6; text-align:center; }
+.messenger-demo-notice { padding:10px 12px; border:1px solid #f5d78e; border-radius:12px; background:#fff8e6; color:#805b12; font-size:11px; line-height:1.5; }
+.messenger-bubble { max-width:84%; padding:10px 13px; border-radius:16px; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.messenger-bubble-store { align-self:flex-start; background:#fff; color:#263449; border-bottom-left-radius:5px; }
+.messenger-bubble-user { align-self:flex-end; background:#d8ebff; color:#123d69; border-bottom-right-radius:5px; }
+.messenger-message-meta { align-self:flex-start; margin:-5px 2px 2px; color:#8995a5; font-size:10px; }
+.messenger-message-meta.is-user { align-self:flex-end; text-align:right; }
+.messenger-composer { display:flex; gap:9px; align-items:center; padding:12px; border-top:1px solid #e2e8f0; background:#fff; }
+.messenger-composer input { min-width:0; flex:1; height:42px; padding:0 13px; border:1px solid #d7e0eb; border-radius:22px; outline:none; }
+.messenger-composer input:focus { border-color:#3987d7; box-shadow:0 0 0 3px rgba(57,135,215,.12); }
+.messenger-composer button { height:42px; padding:0 18px; border:0; border-radius:22px; background:#1767c5; color:#fff; font-weight:700; cursor:pointer; }
+.messenger-composer button:disabled,.messenger-composer input:disabled { opacity:.5; cursor:not-allowed; }
+.messenger-toast { position:absolute; right:16px; bottom:78px; z-index:2; max-width:calc(100% - 32px); padding:10px 14px; border-radius:12px; background:#173b63; color:white; box-shadow:0 8px 24px rgba(15,23,42,.2); font-size:12px; }
+.messenger-toast[hidden] { display:none; }
+@media(max-width:640px) { .messenger-dialog { width:calc(100vw - 14px); height:calc(100dvh - 14px); max-height:calc(100dvh - 14px); border-radius:14px; } .messenger-shell { grid-template-columns:112px minmax(0,1fr); } .messenger-inbox-top { padding:12px 8px; } .messenger-inbox-top h2 { font-size:15px; } .messenger-conversation { flex-direction:column; align-items:center; gap:5px; padding:9px 3px; text-align:center; } .messenger-conversation-copy { width:100%; } .messenger-conversation-copy strong { font-size:10px; } .messenger-conversation-copy small { font-size:9px; } .messenger-conversation-meta { flex-direction:row; align-items:center; } .messenger-header { gap:8px; padding:12px 9px; } .messenger-avatar { width:34px; height:34px; flex-basis:34px; font-size:20px; } .messenger-heading-copy h2 { font-size:13px; } .messenger-heading-copy p { font-size:10px; } .messenger-status { font-size:9px; } .messenger-close { font-size:24px; } .messenger-messages { padding:10px; } .messenger-composer { gap:6px; padding:8px; } .messenger-composer button { padding:0 12px; } }
+
+/* Persistent Messenger entry point, placed in the clear lower-left area. */
+.messenger-launcher{position:fixed;left:24px;bottom:24px;z-index:1200;display:flex;align-items:center;gap:9px;min-height:50px;padding:0 19px;border:0;border-radius:28px;background:#2563c9;color:#fff;font:700 14px inherit;box-shadow:0 10px 28px #1d4f9638;cursor:pointer}.messenger-launcher span{font-size:18px}.messenger-launcher b{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:20px;background:#e53958;color:#fff;font-size:11px}.messenger-launcher b[hidden]{display:none}@media(max-width:640px){.messenger-launcher{left:12px;bottom:14px;min-height:44px;padding:0 14px;font-size:12px}}

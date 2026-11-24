@@ -1,9 +1,9 @@
-import { getMedicineOrders, initMedicineOrder, openMedicineOrder, renderOwnerOnlineOrders, startOwnerOrderWatch, stopOwnerOrderWatch } from "./medicine-order.js";
+import { getMedicineOrders, renderOwnerOnlineOrders, startOwnerOrderWatch, stopOwnerOrderWatch } from "./medicine-order.js";
 import { fetchRoadDistances, fetchRoadRoute } from "./routing.js";
 import { demoOrigin, demoPharmacies, openPharmacyOrder, openCheckoutHistory, getCheckoutOrders, showInvoice } from "./checkout.js";
 
 import { apiEnabled, apiRequest, getSession, saveSession, signIn, signOut } from "./api-client.js";
-import { renderApiHistory, setupCustomerOrdering } from "./customer-api.js";
+import { renderApiHistory } from "./customer-api.js";
 import { boundsContain, findPharmacyCatalog, getMapCoordinates, getSearchBounds, prefetchPharmacyCatalog, validBounds } from "./pharmacy-catalog.js";
 import { matchesMedicine, medicineLabel, parseMedicineList, readPrescriptionImage } from "./prescription.js";
 
@@ -487,8 +487,9 @@ function returnToPharmacySearch() {
   document.querySelector(".hero")?.classList.remove("hidden");
   document.querySelector(".symptom-widget")?.classList.remove("hidden");
   document.querySelector("footer")?.classList.remove("hidden");
+  const restored = restorePharmacySearchState();
   window.requestAnimationFrame(() => pharmacyMap?.invalidateSize());
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (!restored) window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 addListener(document.querySelector("#customerLogoutButton"), "click", async () => {
@@ -877,10 +878,7 @@ addListener(pharmacySuggestions, "click", (event) => {
   if (item.dataset.testAccount === "true") {
     closeSearchSuggestions();
     lowerPharmacySearch();
-    openMedicineOrder({
-      name: "Nhà thuốc Test",
-      address: "12 Đường Trải Nghiệm, Hoàn Kiếm, Hà Nội",
-    });
+    statusText.textContent = "Nhà thuốc thử nghiệm chưa cung cấp số điện thoại liên hệ. Hãy chọn nhà thuốc có thông tin điện thoại để gọi hoặc nhắn tin.";
     return;
   }
   const index = Number(item.dataset.index);
@@ -1186,7 +1184,7 @@ async function findPharmacies(mode = "normal", knownOrigin = null, nameQuery = "
     if (heading) {
       heading.textContent = nameQuery ? `Nhà thuốc phù hợp với “${nameQuery}”` : mode === "normal"
         ? "Nhà thuốc gần vị trí của bạn"
-        : "Nhà thuốc gần bạn có thể kiểm tra thuốc cần tìm";
+        : "Nhà thuốc gần bạn để liên hệ hỏi thuốc";
     }
 
     // Hiện bản đồ và vị trí trước khi chờ máy chủ dữ liệu nhà thuốc.
@@ -1204,7 +1202,7 @@ async function findPharmacies(mode = "normal", knownOrigin = null, nameQuery = "
     const nearby = filterPharmaciesByName(items, nameQuery);
     renderMapPharmacies(nearby, mapMode, origin, updatedAt);
     resultNote.textContent = nearby.length
-      ? (mode === "normal" ? "Đang tính quãng đường bộ…" : "Vui lòng xác nhận thuốc còn hàng với nhà thuốc")
+      ? (mode === "normal" ? "Đang tính quãng đường bộ…" : "Liên hệ nhà thuốc để xác nhận tình trạng thuốc")
       : "Bạn có thể mở rộng phạm vi tìm kiếm bên dưới.";
     statusText.textContent = nearby.length
       ? `Tìm thấy ${nearby.length} nhà thuốc${nameQuery ? ` phù hợp với “${nameQuery}”` : " có dữ liệu"} trong bán kính ${formatRadius(radius)}.`
@@ -1218,6 +1216,7 @@ async function findPharmacies(mode = "normal", knownOrigin = null, nameQuery = "
     } else if (!nearby.length) {
       showPharmacyListState("empty", statusText.textContent);
     }
+    savePharmacySearchState();
   } catch (error) {
     statusText.textContent = error.message || "Không thể tìm nhà thuốc lúc này.";
     resultNote.textContent = "Chưa tải được kết quả. Hãy bấm tìm lại.";
@@ -1227,82 +1226,16 @@ async function findPharmacies(mode = "normal", knownOrigin = null, nameQuery = "
   }
 }
 
-async function fetchPrescriptionStock(medicines, origin, radius) {
-  if (apiEnabled) {
-    const matches = [];
-    let loaded = 0;
-    for (let page = 1; ; page++) {
-      const response = await apiRequest("/api/search/pharmacies", {
-        method: "POST", auth: false,
-        body: { medicine_names: [...new Set(medicines.map(item => item.name))],
-          lat: origin.lat, lng: origin.lon, radius_km: radius / 1000,
-          require_all: true, sort: "distance", page, limit: 50 },
-      });
-      loaded += response.data.length;
-      for (const store of response.data) {
-        // The API searches by name; also check the reviewed strength before calling a result suitable.
-        const stock = (store.items || []).flatMap(item => item.available || []);
-        if (!medicines.every(item => stock.some(entry => Number(entry.quantity) > 0 && matchesMedicine(item, entry)))) continue;
-        matches.push({ ...store, lon: Number(store.lng), lat: Number(store.lat),
-          distance: Number(store.distance_m) / 1000, matchingMedicines: medicines.map(medicineLabel) });
-      }
-      if (!response.data.length || loaded >= response.pagination.total) return matches;
-    }
-  }
-  // Standalone demo: only use explicitly entered inventory with a known location, never OSM proximity as stock.
-  return Object.values(getAllOwnerData()).flatMap(data => {
-    const store = data.pharmacy || {};
-    if (store.latitude == null || store.longitude == null ||
-      String(store.latitude).trim() === "" || String(store.longitude).trim() === "") return [];
-    const lat = Number(store.latitude), lon = Number(store.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return [];
-    const distance = calculateDistanceKm(origin.lat, origin.lon, lat, lon);
-    if (distance > radius / 1000 || !medicines.every(item =>
-      (data.medicines || []).some(entry => Number(entry.quantity) > 0 && matchesMedicine(item, entry)))) return [];
-    return [{ name: store.name || "Nhà thuốc đã đăng ký", address: store.address || "Chưa có địa chỉ",
-      lat, lon, distance, matchingMedicines: medicines.map(medicineLabel) }];
-  }).sort((a, b) => a.distance - b.distance);
-}
-
 async function findPrescriptionPharmacies(knownOrigin = null) {
-  const medicines = parseMedicineList(medicineInput.value);
-  if (pharmacySearchBusy || prescriptionOcrController) return;
-  if (!medicines.length || medicines.length > 30 || !confirmPrescriptionMedicines.checked) {
-    setPrescriptionStatus("Hãy nhập hoặc đọc ảnh, kiểm tra và xác nhận danh sách thuốc trước khi tìm.", "error");
-    return;
-  }
-  const revision = prescriptionRevision;
-  setPharmacySearchBusy(true);
-  try {
-    const previous = lastPharmacySearch;
-    const addressOrigin = previous?.type === "address"
-      ? { lat: Number(previous.location.lat), lon: Number(previous.location.lon) } : null;
-    const origin = await getCurrentSearchOrigin(knownOrigin || addressOrigin || previous?.origin);
-    const radius = getSearchRadius();
-    lastPharmacySearch = { type: "current", mode: "prescription", origin };
-    results.classList.remove("hidden");
-    document.querySelector(".results-title h2").textContent = "Nhà thuốc có đủ thuốc trong danh sách";
-    initializePharmacyMap(origin.lat, origin.lon);
-    renderMapPharmacies([], "prescription", origin);
-    showPharmacyListState("loading", `Đang đối chiếu ${medicines.length} loại thuốc với tồn kho trong ${formatRadius(radius)}…`);
-    statusText.textContent = `Đang tìm nhà thuốc có đủ ${medicines.length} loại thuốc đã xác nhận…`;
-    resultNote.textContent = `Trong ${formatRadius(radius)} quanh vị trí hoặc địa chỉ đã chọn`;
-    results.scrollIntoView({ behavior: "smooth", block: "start" });
-    const stores = await fetchPrescriptionStock(medicines, origin, radius);
-    if (revision !== prescriptionRevision) return;
-    renderMapPharmacies(stores, "prescription", origin);
-    statusText.textContent = stores.length
-      ? `Tìm thấy ${stores.length} nhà thuốc có tồn kho khớp đủ ${medicines.length} loại thuốc trong ${formatRadius(radius)}. Vui lòng xác nhận lại với nhà thuốc.`
-      : "Chưa có nhà thuốc có dữ liệu tồn kho khớp đủ danh sách trong phạm vi đã chọn. Nhà thuốc chưa khai báo tồn kho không được coi là có thuốc.";
-    if (!stores.length) showPharmacyListState("empty", statusText.textContent);
-  } catch (error) {
-    statusText.textContent = error.status === 404
-      ? "Có thuốc chưa có trong danh mục. Hãy kiểm tra lại tên và hàm lượng đã nhận diện."
-      : error.message || "Chưa kiểm tra được tồn kho. Vui lòng thử lại.";
-    if (!results.classList.contains("hidden")) showPharmacyListState("error", statusText.textContent);
-  } finally {
-    setPharmacySearchBusy(false);
-  }
+  const requested = medicineInput?.value?.trim() || "";
+  const message = requested
+    ? `Xin chào, tôi muốn hỏi nhà thuốc hiện có các thuốc sau không: ${requested}. Mong nhà thuốc kiểm tra và phản hồi giúp tôi. Xin cảm ơn!`
+    : "Xin chào, tôi muốn hỏi tình trạng thuốc tại nhà thuốc. Mong nhà thuốc hỗ trợ tư vấn giúp tôi. Xin cảm ơn!";
+  window.smartPharmacyContactMessage = message;
+  await findPharmacies("normal", knownOrigin);
+  const heading = document.querySelector(".results-title h2");
+  if (heading) heading.textContent = "Nhà thuốc để liên hệ hỏi thuốc";
+  resultNote.textContent = "Gọi điện hoặc nhắn tin trực tiếp cho nhà thuốc để xác nhận tình trạng thuốc.";
 }
 
 addListener(
@@ -1310,7 +1243,7 @@ addListener(
   "click",
   () => findPharmacies("normal")
 );
-addListener(prescriptionButton, "click", () => findPharmacies("prescription"));
+addListener(prescriptionButton, "click", () => findPrescriptionPharmacies());
 addListener(
   document.querySelector("#suggestionButton"),
   "click",
@@ -1334,6 +1267,11 @@ async function repeatPharmacySearch() {
 
 addListener(document.querySelector("#searchRadius"), "change", repeatPharmacySearch);
 addListener(pharmacyList, "click", (event) => {
+  const chatButton = event.target.closest("[data-chat-pharmacy]");
+  if (chatButton) {
+    openDemoChat(chatButton.dataset.chatName || "Nhà thuốc", chatButton.dataset.chatAddress || "");
+    return;
+  }
   const button = event.target.closest("[data-pharmacy-search-action]");
   if (!button || pharmacySearchBusy) return;
   if (button.dataset.pharmacySearchAction === "expand") {
@@ -1421,6 +1359,90 @@ let routeLayer = null;
 let selectedMapOrigin = null;
 let mapOriginMarker = null;
 
+// Lưu toàn bộ phiên tìm kiếm để quay lại từ trang chi tiết/lịch sử mà không gọi API lại.
+const PHARMACY_SEARCH_STATE_KEY = "smartPharmacySearchState_v1";
+let restoringPharmacySearchState = false;
+function savePharmacySearchState() {
+  if (restoringPharmacySearchState || !displayedMapResults || !results || results.classList.contains("hidden")) return;
+  try {
+    const center = pharmacyMap?.getCenter();
+    const state = {
+      savedAt: Date.now(),
+      lastSearch: lastPharmacySearch,
+      items: displayedMapResults.items,
+      mode: displayedMapResults.mode,
+      origin: displayedMapResults.origin,
+      selectedMapOrigin,
+      radius: document.querySelector("#searchRadius")?.value || "3000",
+      addressInput: addressInput?.value || "",
+      pharmacySearch: pharmacySearch?.value || "",
+      title: document.querySelector(".results-title h2")?.textContent || "Nhà thuốc quanh địa chỉ đã chọn",
+      status: statusText?.textContent || "",
+      resultNote: resultNote?.textContent || "",
+      summary: document.querySelector("#pharmacyResultSummary")?.textContent || "",
+      routeStatus: document.querySelector("#routeStatus")?.textContent || "",
+      map: center && pharmacyMap ? { lat: center.lat, lon: center.lng, zoom: pharmacyMap.getZoom() } : null,
+      scrollY: window.scrollY
+    };
+    sessionStorage.setItem(PHARMACY_SEARCH_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn("[Smart Pharmacy] Không thể lưu trạng thái tìm kiếm", error);
+  }
+}
+
+function restorePharmacySearchState() {
+  let state;
+  try { state = JSON.parse(sessionStorage.getItem(PHARMACY_SEARCH_STATE_KEY) || "null"); } catch { return false; }
+  if (!state || !Array.isArray(state.items) || !state.mode) return false;
+  restoringPharmacySearchState = true;
+  try {
+    lastPharmacySearch = state.lastSearch || null;
+    selectedMapOrigin = state.selectedMapOrigin || null;
+    if (addressInput) addressInput.value = state.addressInput || "";
+    if (pharmacySearch) pharmacySearch.value = state.pharmacySearch || "";
+    const radius = document.querySelector("#searchRadius");
+    if (radius && [...radius.options].some(option => option.value === String(state.radius))) radius.value = String(state.radius);
+    results.classList.remove("hidden");
+    symptomWidget?.classList.add("hidden");
+    const title = document.querySelector(".results-title h2");
+    if (title) title.textContent = state.title || "Nhà thuốc quanh địa chỉ đã chọn";
+    statusText.textContent = state.status || "Đã khôi phục kết quả tìm kiếm trước đó.";
+    resultNote.textContent = state.resultNote || "";
+    document.querySelector("#pharmacyResultSummary").textContent = state.summary || `Tìm thấy ${state.items.length} nhà thuốc trong khu vực.`;
+    document.querySelector("#routeStatus").textContent = state.routeStatus || "";
+    const fallback = state.map || (state.origin ? { lat: state.origin.lat, lon: state.origin.lon, zoom: 14 } : null);
+    if (fallback) initializePharmacyMap(fallback.lat, fallback.lon, fallback.zoom || 14);
+    displayedMapResults = { items: state.items, mode: state.mode, origin: state.origin || null };
+    document.querySelector("#searchRadius").disabled = state.items.length > 0 && state.items.every(item => item.isDemo);
+    drawMapPharmacies(state.items, state.mode, state.origin || null);
+    if (state.map && pharmacyMap) pharmacyMap.setView([state.map.lat, state.map.lon], state.map.zoom, { animate: false });
+    if (state.origin && state.mode === "address") {
+      const hint = document.querySelector("#mapOriginHint");
+      if (hint && state.selectedMapOrigin) hint.textContent = `Đã chọn điểm xuất phát: ${state.selectedMapOrigin.lat.toFixed(6)}, ${state.selectedMapOrigin.lon.toFixed(6)}. Có thể kéo ghim để điều chỉnh.`;
+    }
+    if (!state.items.length) showPharmacyListState("empty", state.status || "Chưa có kết quả.");
+    window.requestAnimationFrame(() => {
+      pharmacyMap?.invalidateSize();
+      window.scrollTo({ top: Math.max(0, Number(state.scrollY) || 0), behavior: "instant" });
+    });
+    return true;
+  } catch (error) {
+    console.warn("[Smart Pharmacy] Không thể khôi phục trạng thái tìm kiếm", error);
+    return false;
+  } finally {
+    restoringPharmacySearchState = false;
+  }
+}
+
+window.addEventListener("pagehide", savePharmacySearchState);
+window.addEventListener("beforeunload", savePharmacySearchState);
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    restorePharmacySearchState();
+    window.requestAnimationFrame(() => pharmacyMap?.invalidateSize());
+  }
+});
+
 function escapeAddressHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -1461,6 +1483,7 @@ function initializePharmacyMap(latitude, longitude, zoom = 14) {
       if (!displayedMapResults || pharmacySearchBusy) return;
       selectMapOrigin(event.latlng);
     });
+    pharmacyMap.on("moveend", () => savePharmacySearchState());
     pharmacyMap.__originPickerBound = true;
   }
   window.setTimeout(() => pharmacyMap.invalidateSize(), 150);
@@ -1470,6 +1493,7 @@ async function selectMapOrigin(latlng) {
   const origin = { lat: Number(latlng.lat), lon: Number(latlng.lng) };
   if (!Number.isFinite(origin.lat) || !Number.isFinite(origin.lon)) return;
   selectedMapOrigin = origin;
+  savePharmacySearchState();
   const hint = document.querySelector("#mapOriginHint");
   if (hint) hint.textContent = `Đã chọn điểm xuất phát: ${origin.lat.toFixed(6)}, ${origin.lon.toFixed(6)}. Có thể kéo ghim để chỉnh lại, sau đó bấm Đường đi tại nhà thuốc muốn đến.`;
   const current = displayedMapResults;
@@ -1616,8 +1640,45 @@ function normalizeMapPharmacy(item) {
     name: tags.name || tags["name:vi"] || tags["name:en"] || tags.brand || "Nhà thuốc chưa có tên",
     searchNames: [tags["name:vi"], tags["name:en"], tags.brand, tags.operator].filter(Boolean).join(" "),
     address: [tags["addr:housenumber"], tags["addr:street"], tags["addr:suburb"] || tags["addr:district"], tags["addr:city"]].filter(Boolean).join(", ") || "Chưa có địa chỉ chi tiết",
+    phone: tags.phone || tags["contact:phone"] || tags.mobile || tags["contact:mobile"] || "",
+    ownerProfile: item.ownerProfile || null,
     ...coordinates
   };
+}
+
+// Bổ sung hồ sơ chủ nhà thuốc vào kết quả bản đồ: nhà thuốc mới chỉ công khai sau Admin duyệt;
+// nhà thuốc đã khớp OSM được liên kết với bản ghi hiện hữu, không tạo marker trùng.
+const OWNER_SUBMISSIONS_STORAGE_KEY = "sp_pharmacy_submissions_v1";
+function mergeOwnerPharmaciesIntoElements(elements, bounds) {
+  let submissions = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(OWNER_SUBMISSIONS_STORAGE_KEY) || "[]");
+    if (Array.isArray(saved)) submissions = saved;
+  } catch { /* Bỏ qua dữ liệu demo hỏng */ }
+  const output = [...elements];
+  const byOsmId = new Map(output.map((item, index) => [`${item.type}-${item.id}`, index]));
+  for (const profile of submissions) {
+    if (!profile || !["approved", "linked-existing"].includes(profile.status)) continue;
+    const lat = Number(profile.lat), lon = Number(profile.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !validBounds(bounds) ||
+        lat < bounds[0] || lat > bounds[2] || lon < bounds[1] || lon > bounds[3]) continue;
+    const tags = { amenity: "pharmacy", name: profile.name, phone: profile.phone || "", opening_hours: profile.hours || "", description: profile.description || "" };
+    if (profile.linkedOsmId) {
+      const index = byOsmId.get(profile.linkedOsmId);
+      if (index !== undefined) {
+        const existing = output[index];
+        output[index] = { ...existing, tags: { ...(existing.tags || {}), ...tags,
+          name: existing.tags?.name || profile.name,
+          phone: profile.phone || existing.tags?.phone || existing.tags?.["contact:phone"] || "" },
+          ownerProfile: { id: profile.id, photo: profile.photo || "", ownerEmail: profile.ownerEmail || "" } };
+      }
+      continue;
+    }
+    // Hồ sơ nhà thuốc mới đã duyệt: thêm một điểm mới vào kết quả tìm kiếm.
+    output.push({ type: "node", id: `owner-${profile.id}`, lat, lon, tags,
+      ownerProfile: { id: profile.id, photo: profile.photo || "", ownerEmail: profile.ownerEmail || "" } });
+  }
+  return output;
 }
 
 function buildPharmacyQuery(bbox) {
@@ -1799,7 +1860,7 @@ async function fetchPharmaciesNearGeoJSONArea(geometry, radius = 3000, onProgres
   const east = bounds.east + paddingLon;
   const bbox = `${south},${west},${north},${east}`;
   const toResult = (data) => ({
-    items: data.elements.map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
+    items: mergeOwnerPharmaciesIntoElements(data.elements, [south, west, north, east]).map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
       ...pharmacy,
       distance: distanceToGeoJSONAreaKm(pharmacy.lat, pharmacy.lon, geometry)
     })).filter((pharmacy) => pharmacy.distance <= radius / 1000).sort((a, b) => a.distance - b.distance),
@@ -1818,7 +1879,7 @@ async function fetchNearbyPharmacies(latitude, longitude, radius = 3000, onProgr
   // Truy vấn khung chữ nhật có chỉ mục, rồi lọc đúng bán kính ở phía trình duyệt.
   const bbox = `${south},${west},${north},${east}`;
   const toResult = (data) => ({
-    items: data.elements.map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
+    items: mergeOwnerPharmaciesIntoElements(data.elements, bounds).map(normalizeMapPharmacy).filter(Boolean).map((pharmacy) => ({
       ...pharmacy,
       distance: calculateDistanceKm(latitude, longitude, pharmacy.lat, pharmacy.lon)
     })).filter((pharmacy) => pharmacy.distance <= radius / 1000).sort((a, b) => a.distance - b.distance),
@@ -1884,12 +1945,11 @@ function drawMapPharmacies(items, mode, origin, preserveRoute = false) {
       <div class="marker">${index + 1}</div>
       <div><h3>${escapeAddressHtml(pharmacy.name)}</h3><p>${escapeAddressHtml(pharmacy.address)}</p>
         <small class="${pharmacy.roadStatus === "ready" ? "" : "distance-unavailable"}">${distanceLine}</small>
-        ${pharmacy.matchingMedicines ? `<br><small class="stock-match">Có thuốc: ${pharmacy.matchingMedicines.map(escapeAddressHtml).join(", ")}</small>` : ""}
-        ${pharmacy.isDemo ? '<br><span class="demo-badge">Nhà thuốc & tuyến đường minh họa</span>' : ""}
+        ${pharmacy.phone ? `<br><small class="pharmacy-phone">Điện thoại: ${escapeAddressHtml(pharmacy.phone)}</small>` : '<br><small class="pharmacy-phone-unavailable">Chưa có số điện thoại được cung cấp</small>'}
+        ${pharmacy.isDemo ? '<br><span class="demo-badge">Nhà thuốc minh họa · thông tin liên hệ chưa xác thực</span>' : ""}
       </div>
-      <div class="pharmacy-actions">${origin ? '<button class="outline-button route-button" type="button">Đường đi</button>' : ""}<button class="primary mo-open-button" type="button">Đặt thuốc online</button></div>`;
+      <div class="pharmacy-actions">${origin ? '<button class="outline-button route-button" type="button">Đường đi</button>' : ""}${pharmacy.phone ? `<a class="primary contact-call" href="tel:${encodeURIComponent(pharmacy.phone.replace(/[^+\d]/g, ""))}">Gọi điện</a>` : ""}<button class="outline-button contact-chat" type="button" data-chat-pharmacy="${index}" data-chat-name="${escapeAddressHtml(pharmacy.name)}" data-chat-address="${escapeAddressHtml(pharmacy.address)}"><span aria-hidden="true">▣</span> Nhắn tin</button></div></div>`;
     if (origin) article.querySelector(".route-button").addEventListener("click", () => showPharmacyRoute(origin, pharmacy));
-    article.querySelector(".mo-open-button").addEventListener("click", () => openMedicineOrder(pharmacy));
     pharmacyList.appendChild(article);
   });
   if (notice) pharmacyList.prepend(notice);
@@ -1900,11 +1960,142 @@ function drawMapPharmacies(items, mode, origin, preserveRoute = false) {
   }
 }
 
+const DEMO_CHAT_STORAGE_KEY = "smartPharmacyMessengerDemo_v2";
+let demoConversations = loadDemoConversations();
+let activeDemoConversationId = null;
+let demoReplyTimers = new Map();
+
+function loadDemoConversations() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEMO_CHAT_STORAGE_KEY) || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch { return []; }
+}
+function saveDemoConversations() {
+  try { localStorage.setItem(DEMO_CHAT_STORAGE_KEY, JSON.stringify(demoConversations)); } catch {}
+}
+function demoConversationId(name, address) { return `${name}::${address}`; }
+function getActiveDemoConversation() { return demoConversations.find(item => item.id === activeDemoConversationId); }
+function formatDemoTime(value) {
+  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+function showMessengerToast(message) {
+  const toast = document.querySelector("#messengerToast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.hidden = false;
+  clearTimeout(showMessengerToast.timer);
+  showMessengerToast.timer = setTimeout(() => { toast.hidden = true; }, 3200);
+}
+function updateMessengerUnread() {
+  const total = demoConversations.reduce((sum, item) => sum + (item.unread || 0), 0);
+  const badge = document.querySelector("#messengerUnreadTotal");
+  const launcherBadge = document.querySelector("#messengerLauncherUnread");
+  if (launcherBadge) { launcherBadge.hidden = total === 0; launcherBadge.textContent = total > 9 ? "9+" : String(total); }
+  if (badge) { badge.textContent = total > 99 ? "99+" : String(total); badge.hidden = total === 0; }
+  renderDemoConversationList();
+}
+function renderDemoConversationList() {
+  const list = document.querySelector("#messengerConversationList");
+  if (!list) return;
+  list.replaceChildren();
+  const sorted = [...demoConversations].sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!sorted.length) {
+    const empty = document.createElement("p"); empty.className = "messenger-empty-inbox";
+    empty.textContent = "Chưa có hội thoại. Hãy chọn Nhắn tin tại một nhà thuốc."; list.appendChild(empty); return;
+  }
+  sorted.forEach(conversation => {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = `messenger-conversation${conversation.id === activeDemoConversationId ? " is-active" : ""}`;
+    const avatar = document.createElement("span"); avatar.className = "messenger-list-avatar"; avatar.textContent = "✚";
+    const copy = document.createElement("span"); copy.className = "messenger-conversation-copy";
+    const name = document.createElement("strong"); name.textContent = conversation.name;
+    const preview = document.createElement("small"); preview.textContent = conversation.messages?.at(-1)?.text || conversation.address || "Bắt đầu trò chuyện";
+    const meta = document.createElement("span"); meta.className = "messenger-conversation-meta";
+    const time = document.createElement("small"); time.textContent = conversation.updatedAt ? formatDemoTime(conversation.updatedAt) : "";
+    meta.appendChild(time);
+    if (conversation.unread) { const unread = document.createElement("b"); unread.className = "messenger-unread-count"; unread.textContent = conversation.unread > 9 ? "9+" : String(conversation.unread); meta.appendChild(unread); }
+    copy.append(name, preview); button.append(avatar, copy, meta);
+    button.addEventListener("click", () => selectDemoConversation(conversation.id));
+    list.appendChild(button);
+  });
+}
+function renderDemoMessages(conversation) {
+  const messages = document.querySelector("#messengerDemoMessages");
+  if (!messages) return;
+  messages.replaceChildren();
+  const notice = document.createElement("div"); notice.className = "messenger-demo-notice";
+  notice.textContent = "Bạn đang sử dụng bản DEMO. Tin nhắn và phản hồi minh họa chỉ lưu trên trình duyệt này, chưa được gửi đến nhà thuốc thật.";
+  messages.appendChild(notice);
+  conversation.messages.forEach(message => {
+    const bubble = document.createElement("div");
+    bubble.className = `messenger-bubble ${message.from === "user" ? "messenger-bubble-user" : "messenger-bubble-store"}`;
+    bubble.textContent = message.text;
+    messages.appendChild(bubble);
+    const meta = document.createElement("p"); meta.className = `messenger-message-meta${message.from === "user" ? " is-user" : ""}`;
+    meta.textContent = `${formatDemoTime(message.time)}${message.from === "user" ? (message.status === "read" ? " · Đã xem (mô phỏng)" : " · Đã gửi (DEMO)") : (message.isAuto ? " · Phản hồi tự động DEMO" : "")}`;
+    messages.appendChild(meta);
+  });
+  messages.scrollTop = messages.scrollHeight;
+}
+function selectDemoConversation(id) {
+  const conversation = demoConversations.find(item => item.id === id);
+  if (!conversation) return;
+  activeDemoConversationId = id; conversation.unread = 0;
+  document.querySelector("#messengerDemoTitle").textContent = conversation.name;
+  document.querySelector("#messengerDemoAddress").textContent = conversation.address;
+  document.querySelector("#messengerDemoInput").disabled = false;
+  document.querySelector('#messengerDemoForm button[type="submit"]').disabled = false;
+  renderDemoMessages(conversation); saveDemoConversations(); updateMessengerUnread();
+}
+function openDemoChat(pharmacyName, pharmacyAddress) {
+  const dialog = document.querySelector("#messengerDemoDialog");
+  if (!dialog) return;
+  const id = demoConversationId(pharmacyName, pharmacyAddress);
+  let conversation = demoConversations.find(item => item.id === id);
+  if (!conversation) {
+    conversation = { id, name: pharmacyName, address: pharmacyAddress, unread: 0, updatedAt: Date.now(), messages: [{ from: "store", text: `Xin chào! Đây là hội thoại DEMO với ${pharmacyName}. Bạn có thể thử gửi tin nhắn bên dưới.`, time: Date.now(), isAuto: true }] };
+    demoConversations.push(conversation); saveDemoConversations();
+  }
+  renderDemoConversationList(); selectDemoConversation(id);
+  if (typeof dialog.showModal === "function" && !dialog.open) dialog.showModal();
+  else dialog.setAttribute("open", "");
+  document.querySelector("#messengerDemoInput").focus();
+}
+function submitDemoMessage(event) {
+  event.preventDefault();
+  const input = document.querySelector("#messengerDemoInput");
+  const conversation = getActiveDemoConversation();
+  const value = input?.value.trim();
+  if (!conversation || !value) return;
+  const sentAt = Date.now();
+  conversation.messages.push({ from: "user", text: value, time: sentAt, status: "sent" });
+  conversation.updatedAt = sentAt; input.value = "";
+  renderDemoMessages(conversation); saveDemoConversations(); updateMessengerUnread();
+  const timer = setTimeout(() => {
+    const current = demoConversations.find(item => item.id === conversation.id);
+    if (!current) return;
+    const replyAt = Date.now();
+    current.messages = current.messages.map(message => message.from === "user" && message.time === sentAt ? { ...message, status: "read" } : message);
+    current.messages.push({ from: "store", text: "Cảm ơn bạn đã nhắn tin! Đây là phản hồi tự động để minh họa giao diện. Khi triển khai chính thức, nhà thuốc sẽ trực tiếp tiếp nhận và phản hồi tin nhắn.", time: replyAt, isAuto: true });
+    current.updatedAt = replyAt;
+    const dialog = document.querySelector("#messengerDemoDialog");
+    if (dialog?.open && activeDemoConversationId === current.id) renderDemoMessages(current);
+    else current.unread = (current.unread || 0) + 1;
+    saveDemoConversations(); updateMessengerUnread();
+    if (!dialog?.open || activeDemoConversationId !== current.id) showMessengerToast(`Có phản hồi DEMO từ ${current.name}`);
+  }, 2200);
+  demoReplyTimers.set(conversation.id, timer);
+}
+const messengerForm = document.querySelector("#messengerDemoForm");
+if (messengerForm) messengerForm.addEventListener("submit", submitDemoMessage);
+updateMessengerUnread();
+
 async function renderMapPharmacies(items, mode, origin = null, updatedAt = null, resolveRoad = true) {
   items = items.map(item => ({ ...item, id: item.id || `${item.name}|${item.lat},${item.lon}` }));
   const dateNote = updatedAt && Number.isFinite(Date.parse(updatedAt))
     ? ` Dữ liệu cập nhật ${new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Bangkok" }).format(new Date(updatedAt))}.` : "";
-  document.querySelector("#pharmacyResultSummary").textContent = `Tìm thấy ${items.length} nhà thuốc có dữ liệu phù hợp.${dateNote}`;
+  document.querySelector("#pharmacyResultSummary").textContent = `Tìm thấy ${items.length} nhà thuốc trong khu vực.${dateNote}`;
   const version = ++mapResultsVersion;
   routeRequestVersion++;
   document.querySelector("#routeStatus").textContent = "";
@@ -1912,9 +2103,10 @@ async function renderMapPharmacies(items, mode, origin = null, updatedAt = null,
   displayedMapResults = { items: items.map((item) => ({ ...item, roadStatus: isDemo ? "ready" : "pending" })), mode, origin };
   document.querySelector("#searchRadius").disabled = isDemo;
   document.querySelector("#roadDistanceHint").textContent = isDemo
-    ? "Chế độ demo: nhà thuốc, quãng đường và thời gian là dữ liệu mô phỏng. Bạn có thể đặt hàng và xuất hóa đơn mà không cần định vị."
+    ? "Đây là dữ liệu nhà thuốc minh họa; hãy xác minh thông tin liên hệ trước khi đến."
     : "Bán kính dùng để tìm trong khu vực. Quãng đường hiển thị theo tuyến lái xe từ điểm bắt đầu; dịch vụ lỗi sẽ không hiển thị khoảng cách ước đoán.";
   drawMapPharmacies(displayedMapResults.items, mode, origin);
+  savePharmacySearchState();
   if (isDemo || !origin || !items.length || !resolveRoad) return;
   const routed = await fetchRoadDistances(origin, items);
   if (version !== mapResultsVersion) return;
@@ -1924,6 +2116,7 @@ async function renderMapPharmacies(items, mode, origin = null, updatedAt = null,
   }).sort((a, b) => (a.roadDistanceKm ?? Infinity) - (b.roadDistanceKm ?? Infinity));
   drawMapPharmacies(displayedMapResults.items, mode, origin, true);
   updateRoadResultNote(displayedMapResults.items);
+  savePharmacySearchState();
 }
 
 function updateRoadResultNote(items) {
@@ -1955,6 +2148,7 @@ async function showPharmacyRoute(origin, destination) {
           : item).sort((a, b) => (a.roadDistanceKm ?? Infinity) - (b.roadDistanceKm ?? Infinity));
         drawMapPharmacies(displayedMapResults.items, displayedMapResults.mode, displayedMapResults.origin, true);
         updateRoadResultNote(displayedMapResults.items);
+        savePharmacySearchState();
       }
     }
   } catch (error) {
@@ -2056,6 +2250,7 @@ async function searchPharmaciesByAddress(knownLocation = null, nameQuery = "") {
     } else if (!nearbyPharmacies.length) {
       showPharmacyListState("empty", statusText.textContent);
     }
+    savePharmacySearchState();
   } catch (error) {
     statusText.textContent =
       error.message || "Có lỗi khi tìm kiếm địa chỉ.";
@@ -2094,22 +2289,16 @@ addListener(document.querySelector("#loadOrderDemo"), "click", () => {
 /* Đồng bộ header và trang lịch sử với phiên đăng nhập khách hàng trong tab hiện tại. */
 updateCustomerHeader();
 prefetchPharmacyCatalog();
-initMedicineOrder({
-  getCustomer: () => activeCustomer,
-  onCreateAccount: (email, exists) => {
-    selectedRole = "customer";
-    openAuth(exists ? "login" : "register");
-    authEmail.value = email;
-  },
-});
+
 if (!isAdminRoute && activeCustomer && activeCustomer.role === "customer") {
   openCustomerDashboard();
+} else if (!isAdminRoute) {
+  restorePharmacySearchState();
 }
 
 if (apiEnabled) {
   document.querySelector('.customer-demo-note').textContent = 'Lịch sử được lưu trên hệ thống và gắn với tài khoản đã đăng nhập.';
   authPassword.minLength = 4; // Cho phép tài khoản demo test/test; tài khoản thật vẫn được xác thực bởi API.
-  setupCustomerOrdering();
   if (getSession()) apiRequest('/api/v1/me').then(result => {
     saveSession({ ...getSession(), user: result.data.user });
     activeCustomer = result.data.user.role === 'CUSTOMER' ? { ...result.data.user, role: 'customer' } : null;
@@ -2118,3 +2307,19 @@ if (apiEnabled) {
     if (error.status === 401) { activeCustomer = null; updateCustomerHeader(); }
   });
 }
+
+// Global inbox launcher: customers can open the Messenger inbox without first selecting a pharmacy.
+const messengerLauncher = document.querySelector("#messengerLauncher");
+if (messengerLauncher) messengerLauncher.addEventListener("click", () => {
+  const dialog = document.querySelector("#messengerDemoDialog");
+  if (dialog && !dialog.open) dialog.showModal();
+  renderDemoConversationList();
+});
+
+window.addEventListener("storage", event => {
+  if (event.key === "smartPharmacyMessengerDemo_v2") {
+    updateMessengerUnread();
+    const dialog = document.querySelector("#messengerDemoDialog");
+    if (dialog?.open && activeDemoConversationId) { const c = getActiveDemoConversation(); if (c) renderDemoMessages(c); }
+  }
+});

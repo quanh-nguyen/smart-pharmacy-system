@@ -28,3 +28,5 @@
 .auth-back{display:inline-block;margin-top:20px;color:var(--blue);font-size:11px;font-weight:600}
 .logout-button{padding:9px 11px;font-size:10px}
 @media(max-width:480px){.auth-card{padding:24px 20px}.auth-card h1{font-size:22px}.logout-button{padding:8px;font-size:9px}}
+/* Inventory and online-order modules are intentionally retired: this workspace manages pharmacy contact details only. */
+#view-medicines, #view-orders, #medicineModal { display: none !important; }

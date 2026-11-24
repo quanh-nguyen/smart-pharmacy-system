@@ -51,7 +51,7 @@ export async function apiRequest(path, options = {}) {
 export async function signIn(email, password, { name, role, register = false, totp } = {}) {
   const result = await apiRequest(`/api/v1/auth/${register ? 'register' : 'login'}`, {
     method: 'POST', auth: false,
-    body: { email, password, ...(register ? { role, ...(name ? { name } : {}) } : {}), ...(totp ? { totp } : {}) },
+    body: { email, password, ...(register ? { role } : {}), ...(totp ? { totp } : {}) },
   });
   if (result.data.accessToken) saveSession(result.data);
   return result.data;
